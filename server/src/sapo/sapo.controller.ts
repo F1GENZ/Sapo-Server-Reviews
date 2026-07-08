@@ -141,14 +141,10 @@ export class SapoController {
   }
 
   @Get('/oauth/install/webhooks')
-  async webhookChallenge(@Req() req: Request, @Query() query: Record<string, unknown>, @Res() res: Response) {
-    await this.rateLimit.assertAllowed(
-      'webhook-challenge',
-      clientFingerprint(req),
-      this.env.WEBHOOK_RATE_LIMIT_WINDOW_SECONDS,
-      this.env.WEBHOOK_RATE_LIMIT_MAX,
-    );
-    res.type('text/plain').send(this.webhooks.verifyChallenge(query, this.env.SAPO_WEBHOOK_VERIFY_TOKEN));
+  async webhookChallenge(@Res() res: Response) {
+    // Sapo does not use a GET verify-challenge handshake.
+    // Return 200 for health-check compatibility.
+    res.status(200).send('ok');
   }
 
   @Post('/oauth/install/webhooks')

@@ -233,6 +233,12 @@ export class WebhookService {
           if (resolved === identity.storeDomain) await this.shopDomains.saveMapping(identity.storeDomain, domain);
         }
         result = { ok: true, topic: normalizedTopic, storeDomain: identity.storeDomain };
+      } else if (normalizedTopic.startsWith('products/') && identity.storeDomain) {
+        // Phase 08: catalog sync will consume these events
+        result = { ok: true, topic: normalizedTopic, storeDomain: identity.storeDomain, queued: true };
+      } else if (normalizedTopic.startsWith('orders/') && identity.storeDomain) {
+        // Phase 08: order sync will consume these events
+        result = { ok: true, topic: normalizedTopic, storeDomain: identity.storeDomain, queued: true };
       }
       await this.db.webhookEvent.update({
         where: { id: event.id },
