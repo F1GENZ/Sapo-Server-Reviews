@@ -1,0 +1,15 @@
+{
+  "name": "f1genz-review-sapo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "npm run verify:server && npm run verify:client && npm run verify:env && npm run scan:anti-patterns",
+    "verify:server": "npm --prefix server run lint && npm --prefix server test && npm --prefix server run build && npm run verify:build-output",
+    "verify:client": "npm --prefix client run lint && npm --prefix client run build",
+    "verify:lifecycle": "npm --prefix server test",
+    "verify:env": "node scripts/verify-env.mjs",
+    "verify:build-output": "node scripts/verify-build-output.mjs",
+    "scan:anti-patterns": "node scripts/scan-anti-patterns.mjs"
+  }
+}

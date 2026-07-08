@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum AppStatus {
+  trial
+  active
+  free
+  canceled
+  expired
+  needs_reinstall
+  declined
+  uninstalled
+}
+
+enum WebhookEventStatus {
+  received
+  processing
+  processed
+  failed
+  ignored
+}
+
+enum WebhookRegistrationStatus {
+  not_configured
+  pending
+  registered
+  degraded
+  failed
+}
+
+enum DomainKind {
+  primary
+  mysapo
+  custom
+  alias
+}
+
+model Shop {
+  id        String   @id @default(cuid())
+  storeDomain     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  install               AppInstall?
+  domains               ShopDomain[]
+  subscriptionSnapshots SubscriptionSnapshot[]
+  webhookEvents         WebhookEvent[]
+
+  @@index([storeDomain])
+}
+
+model AppInstall {
+  id     String @id @default(cuid())
+  shopId String @unique
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  storeDomain     String    @unique
+  status          AppStatus @default(trial)
+
+  accessTokenCiphertext  String?
+  accessTokenIv          String?
+  accessTokenTag         String?
+
+  featuresUnlocked Boolean @default(true)
+
+  tokenVersion        Int @default(0)
+  lifecycleGeneration Int @default(0)
+
+  installedAt   DateTime?
+  uninstalledAt DateTime?
+  dataPreserved Boolean   @default(true)
+
+  webhookRegistrationStatus WebhookRegistrationStatus @default(not_configured)
+  webhookRegisteredAt       DateTime?
+  webhookRegistrationError  String?
+
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeDomain, status])
+  @@index([status])
+  @@index([lifecycleGeneration])
+}
+
+model ShopDomain {
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  storeDomain  String
+  domain       String
+  kind         DomainKind @default(alias)
+  active       Boolean    @default(true)
+  tombstonedAt DateTime?
+  source       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // PostgreSQL partial unique index is created by Phase 3 migration:
+  // UNIQUE (domain) WHERE active = true.
+  @@index([domain])
+  @@index([storeDomain, active])
+  @@index([shopId, active])
+}
+
+model SubscriptionSnapshot {
+  id     String  @id @default(cuid())
+  shopId String?
+  shop   Shop?   @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  correlationKey String @unique
+  domain         String?
+  subscriptionId String?
+  payloadHash    String
+
+  status    String
+  plan      String  @default("Free")
+  isActive  Boolean @default(false)
+  isPaid    Boolean @default(false)
+  expiresAt DateTime?
+  syncedAt  DateTime
+  payload   Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([domain])
+  @@index([subscriptionId])
+  @@index([payloadHash])
+  @@index([status, syncedAt])
+}
+
+model WebhookEvent {
+  id     String  @id @default(cuid())
+  shopId String?
+  shop   Shop?   @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  providerEventId String?
+  idempotencyKey  String @unique
+  topic           String
+  normalizedTopic String
+  resolvedStoreDomain   String?
+  resolvedDomain  String?
+  resourceType    String?
+  resourceId      String?
+  payloadHash     String
+
+  payload Json?
+  headers Json?
+
+  status      WebhookEventStatus @default(received)
+  attempts    Int                @default(0)
+  maxAttempts Int                @default(8)
+  lastError   String?
+  receivedAt  DateTime           @default(now())
+  nextRetryAt DateTime?
+  processedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([providerEventId])
+  @@index([topic, resolvedStoreDomain, payloadHash])
+  @@index([topic, resolvedDomain, payloadHash])
+  @@index([resolvedStoreDomain, status, receivedAt])
+  @@index([status, nextRetryAt])
+}
