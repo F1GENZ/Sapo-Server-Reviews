@@ -4,6 +4,7 @@ import type { AppEnv } from './config/env.schema';
 import { CatalogModule } from './catalog/catalog.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
+import { QnaModule } from './qna/qna.module';
 import { RedisModule } from './redis/redis.module';
 import { IngressRateLimitService } from './common/security/ingress-rate-limit.service';
 import { ShopAuthGuard } from './common/guards/shop-auth.guard';
@@ -23,7 +24,7 @@ import { WebhookService } from './sapo/webhook.service';
 import { RedisService } from './redis/redis.service';
 
 @Module({
-  imports: [AppConfigModule, RedisModule, DatabaseModule, SapoApiModule, CatalogModule],
+  imports: [AppConfigModule, RedisModule, DatabaseModule, SapoApiModule, CatalogModule, QnaModule],
   controllers: [SapoController, HealthController],
   providers: [
     {

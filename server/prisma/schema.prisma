@@ -263,3 +263,35 @@ model ReviewProduct {
   @@index([shopId, productId, status])
   @@map("review_products")
 }
+
+model QnaQuestion {
+  id        String @id @default(cuid())
+  shopId    String  @map("shop_id")
+  productId String  @map("product_id")
+
+  productTitle  String? @map("product_title")
+  productName   String? @map("product_name")
+  productHandle String? @map("product_handle")
+  productImage  String? @map("product_image")
+
+  questionId String @map("question_id")
+  question   String
+  author     String
+  email      String?
+  phone      String?
+  answer     String?
+  answeredBy String? @map("answered_by")
+  status     String  @default("pending")
+  answeredAt BigInt? @map("answered_at")
+  sourceRawJson String? @map("source_raw_json")
+
+  createdAt BigInt @map("created_at")
+  updatedAt BigInt @map("updated_at")
+
+  @@unique([shopId, productId, questionId])
+  @@index([shopId])
+  @@index([shopId, productId])
+  @@index([shopId, status])
+  @@map("qna_questions")
+}
+

@@ -1,0 +1,158 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  Req,
+  NotFoundException,
+  BadRequestException,
+  DefaultValuePipe,
+  ParseIntPipe,
+} from '@nestjs/common';
+import { ShopAuthGuard } from '../common/guards/shop-auth.guard';
+import { QnaService } from './qna.service';
+import { CreateQuestionDto } from './dto/create-question.dto';
+import { UpdateQuestionDto } from './dto/update-question.dto';
+import { AnswerQuestionDto, UpdateQuestionStatusDto } from './dto/answer-question.dto';
+import { ValidationPipe } from '@nestjs/common';
+import { NumericIdPipe } from '../common/pipes/numeric-id.pipe';
+
+type AuthRequest = {
+  token?: string;
+  storeDomain?: string;
+};
+
+/** Validate storeDomain helper */
+const STORE_DOMAIN_RE = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
+
+/** Ensure the request has valid auth (token + storeDomain). */
+function requireAuth(req: AuthRequest): asserts req is Required<AuthRequest> & { storeDomain: string } {
+  if (!req.token || !req.storeDomain || !STORE_DOMAIN_RE.test(req.storeDomain)) {
+    throw new BadRequestException('Missing or invalid auth');
+  }
+}
+
+@Controller('admin/qna')
+@UseGuards(ShopAuthGuard)
+export class QnaController {
+  constructor(private readonly qnaService: QnaService) {}
+
+  // ── Cross-product list ────────────────────────────────────────────────
+
+  @Get()
+  async listAllQuestions(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('status') status: string | undefined,
+    @Query('sort') sort: string | undefined,
+    @Query('productId') productId: string | undefined,
+    @Query('search') search: string | undefined,
+    @Req() req: AuthRequest,
+  ) {
+    requireAuth(req);
+    const result = await this.qnaService.getAllQuestions(req.storeDomain, {
+      page,
+      limit,
+      status,
+      sort,
+      productId,
+      search,
+    });
+    return { data: result };
+  }
+
+  // ── Product-scoped routes ─────────────────────────────────────────────
+
+  @Get(':productId')
+  async getQuestions(
+    @Param('productId', NumericIdPipe) productId: string,
+    @Req() req: AuthRequest,
+  ) {
+    requireAuth(req);
+    const result = await this.qnaService.getQuestions(req.storeDomain, productId);
+    return { data: result };
+  }
+
+  @Get(':productId/stats')
+  async getStats(
+    @Param('productId', NumericIdPipe) productId: string,
+    @Req() req: AuthRequest,
+  ) {
+    requireAuth(req);
+    const stats = await this.qnaService.getStats(req.storeDomain, productId);
+    return { data: stats };
+  }
+
+  @Post(':productId')
+  async createQuestion(
+    @Param('productId', NumericIdPipe) productId: string,
+    @Body(new ValidationPipe({ transform: true, whitelist: true }))
+    dto: CreateQuestionDto,
+    @Req() req: AuthRequest,
+  ) {
+    requireAuth(req);
+    const question = await this.qnaService.submitQuestion(req.storeDomain, productId, dto);
+    return { data: question };
+  }
+
+  @Patch(':productId/:questionId')
+  async updateQuestion(
+    @Param('productId', NumericIdPipe) productId: string,
+    @Param('questionId') questionId: string,
+    @Body(new ValidationPipe({ transform: true, whitelist: true }))
+    dto: UpdateQuestionDto,
+    @Req() req: AuthRequest,
+  ) {
+    requireAuth(req);
+    const question = await this.qnaService.updateQuestion(
+      req.storeDomain,
+      productId,
+      questionId,
+      dto,
+    );
+    if (!question) throw new NotFoundException('Question not found');
+    return { data: question };
+  }
+
+  @Patch(':productId/:questionId/status')
+  async updateStatus(
+    @Param('productId', NumericIdPipe) productId: string,
+    @Param('questionId') questionId: string,
+    @Body(new ValidationPipe({ transform: true, whitelist: true }))
+    dto: UpdateQuestionStatusDto,
+    @Req() req: AuthRequest,
+  ) {
+    requireAuth(req);
+    const question = await this.qnaService.updateStatus(
+      req.storeDomain,
+      productId,
+      questionId,
+      dto.status,
+    );
+    if (!question) throw new NotFoundException('Question not found');
+    return { data: question };
+  }
+
+  @Patch(':productId/:questionId/answer')
+  async answerQuestion(
+    @Param('productId', NumericIdPipe) productId: string,
+    @Param('questionId') questionId: string,
+    @Body(new ValidationPipe({ transform: true, whitelist: true }))
+    dto: AnswerQuestionDto,
+    @Req() req: AuthRequest,
+  ) {
+    requireAuth(req);
+    const question = await this.qnaService.answerQuestion(
+      req.storeDomain,
+      productId,
+      questionId,
+      dto,
+    );
+    if (!question) throw new NotFoundException('Question not found');
+    return { data: question };
+  }
+}
