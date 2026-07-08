@@ -2,10 +2,16 @@ import { Module } from '@nestjs/common';
 import { APP_ENV, AppConfigModule } from './config/app-config.module';
 import type { AppEnv } from './config/env.schema';
 import { CatalogModule } from './catalog/catalog.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
+import { MediaModule } from './media/media.module';
+import { OpsModule } from './ops/ops.module';
+import { PurchaseModule } from './purchase/purchase.module';
 import { QnaModule } from './qna/qna.module';
 import { RedisModule } from './redis/redis.module';
+import { ReviewModule } from './review/review.module';
+import { StorefrontModule } from './storefront/storefront.module';
 import { IngressRateLimitService } from './common/security/ingress-rate-limit.service';
 import { ShopAuthGuard } from './common/guards/shop-auth.guard';
 import { SapoController } from './sapo/sapo.controller';
@@ -24,7 +30,11 @@ import { WebhookService } from './sapo/webhook.service';
 import { RedisService } from './redis/redis.service';
 
 @Module({
-  imports: [AppConfigModule, RedisModule, DatabaseModule, SapoApiModule, CatalogModule, QnaModule],
+  imports: [
+    AppConfigModule, RedisModule, DatabaseModule, SapoApiModule,
+    CatalogModule, PurchaseModule, ReviewModule, QnaModule,
+    DashboardModule, OpsModule, MediaModule, StorefrontModule,
+  ],
   controllers: [SapoController, HealthController],
   providers: [
     {
