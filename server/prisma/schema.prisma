@@ -227,3 +227,39 @@ model CustomerPurchase {
   @@index([shopId, phoneHash])
   @@map("customer_purchases")
 }
+
+model ReviewProduct {
+  id        String @id @default(cuid())
+  shopId    String @map("shop_id")
+  productId String @map("product_id")
+
+  productTitle  String? @map("product_title")
+  productName   String? @map("product_name")
+  productHandle String? @map("product_handle")
+  productImage  String? @map("product_image")
+
+  reviewId String @map("review_id")
+  rating   Int
+  content  String
+  author   String
+  email    String?
+  phone    String?
+  title    String?
+  media    Json?
+  status   String  @default("pending")
+  verified Boolean @default(false)
+  pinned   Boolean @default(false)
+  reply    String?
+  repliedAt      BigInt? @map("replied_at")
+  sourceRawJson  String? @map("source_raw_json")
+
+  createdAt BigInt @map("created_at")
+  updatedAt BigInt @map("updated_at")
+
+  @@unique([shopId, productId, reviewId])
+  @@index([shopId])
+  @@index([shopId, productId])
+  @@index([shopId, status])
+  @@index([shopId, productId, status])
+  @@map("review_products")
+}
