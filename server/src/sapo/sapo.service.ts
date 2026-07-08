@@ -8,6 +8,7 @@ import { OAuthStateService } from './oauth-state.service';
 import { SessionService } from './session.service';
 import { ShopDomainService } from './shop-domain.service';
 import { TokenEncryptionService } from './token-encryption.service';
+import { StorefrontService } from '../storefront/storefront.service';
 import { WebhookRegistrationService } from './webhook-registration.service';
 
 const BLOCKED_STATUSES = new Set(['canceled', 'expired', 'needs_reinstall', 'declined', 'uninstalled']);
@@ -38,6 +39,7 @@ export class SapoService {
     private readonly shopDomains: ShopDomainService,
     private readonly lifecycleLocks: LifecycleLockService,
     private readonly webhookRegistration: WebhookRegistrationService,
+    private readonly storefrontService: StorefrontService,
   ) {
     this.db = prisma as any;
   }
@@ -181,9 +183,11 @@ export class SapoService {
       }
 
       // Fire-and-forget post-install hooks
-      this.webhookRegistration.registerForInstall(storeDomain, tokenPayload.access_token)
-        .catch((err) => this.constructor.prototype.constructor.name
-          ? undefined : undefined); // noop — logged in webhookRegistration
+      const accessToken = tokenPayload.access_token;
+      this.webhookRegistration.registerForInstall(storeDomain, accessToken)
+        .catch(() => { /* logged in webhookRegistration */ });
+      this.storefrontService.writeStorefrontConfig(storeDomain, accessToken)
+        .catch(() => { /* non-critical */ });
 
       return this.sessionService.createHandoff(storeDomain, oauthState.redirectTo);
     } finally {
