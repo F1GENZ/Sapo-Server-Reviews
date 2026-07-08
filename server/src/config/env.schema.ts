@@ -19,6 +19,10 @@ export type AppEnv = {
   SAPO_API_MAX_CONCURRENT: number;
   SAPO_API_MIN_INTERVAL_MS: number;
 
+  R2_WORKER_URL: string;
+  R2_UPLOAD_SECRET: string;
+  R2_PUBLIC_DOMAIN: string;
+
   APP_SESSION_SECRET: string;
   APP_SESSION_TTL_SECONDS: number;
   SESSION_HANDOFF_TTL_SECONDS: number;
@@ -230,6 +234,10 @@ export const loadEnv = (env: RawEnv = process.env): AppEnv => {
       250,
       { min: 0 },
     ),
+
+    R2_WORKER_URL: trim(env.R2_WORKER_URL) || '',
+    R2_UPLOAD_SECRET: trim(env.R2_UPLOAD_SECRET) || '',
+    R2_PUBLIC_DOMAIN: trim(env.R2_PUBLIC_DOMAIN) || '',
 
     APP_SESSION_SECRET: trim(env.APP_SESSION_SECRET),
     APP_SESSION_TTL_SECONDS: parseInteger(
