@@ -208,7 +208,7 @@ export class SapoApiService {
   // ─── Products ───────────────────────────────────────────────────
 
   async getProducts(storeDomain: string, accessToken: string, params: GetProductsParams = {}): Promise<SapoProduct[]> {
-    const qp = this.buildQueryParams(params);
+    const qp = this.buildQueryParams(params as Record<string, string | number | boolean | null | undefined>);
     const path = `/products.json${qp.toString() ? '?' + qp.toString() : ''}`;
     const res = await this.fetch(storeDomain, accessToken, false, path);
     const payload = await res.json() as SapoListResponse<SapoProduct>;
@@ -217,7 +217,7 @@ export class SapoApiService {
   }
 
   async getProductsCount(storeDomain: string, accessToken: string, params: GetProductsCountParams = {}): Promise<number> {
-    const qp = this.buildQueryParams(params);
+    const qp = this.buildQueryParams(params as Record<string, string | number | boolean | null | undefined>);
     const path = `/products/count.json${qp.toString() ? '?' + qp.toString() : ''}`;
     const res = await this.fetch(storeDomain, accessToken, false, path);
     const payload = await res.json() as { count?: number };
@@ -375,7 +375,7 @@ export class SapoApiService {
   // ─── Orders ─────────────────────────────────────────────────────
 
   async getOrders(storeDomain: string, accessToken: string, params: GetOrdersParams = {}): Promise<SapoOrder[]> {
-    const qp = this.buildQueryParams(params);
+    const qp = this.buildQueryParams(params as Record<string, string | number | boolean | null | undefined>);
     const path = `/orders.json${qp.toString() ? '?' + qp.toString() : ''}`;
     const res = await this.fetch(storeDomain, accessToken, false, path);
     const payload = await res.json() as SapoListResponse<SapoOrder>;

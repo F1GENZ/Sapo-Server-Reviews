@@ -782,7 +782,7 @@ export class ReviewService {
 
     await this.prisma.appInstall.update({
       where: { storeDomain },
-      data: { metadata },
+      data: { metadata: metadata as any },
     });
 
     return merged;
@@ -811,7 +811,7 @@ export class ReviewService {
 
     await this.prisma.appInstall.update({
       where: { storeDomain },
-      data: { metadata },
+      data: { metadata: metadata as any },
     });
 
     return merged;

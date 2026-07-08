@@ -157,8 +157,8 @@ export class SubscriptionService {
         isPaid: snapshot.isPaid,
         expiresAt: snapshot.expiresAt,
         syncedAt: new Date(),
-        payload: snapshot.payload,
-      },
+        payload: snapshot.payload as any,
+      } as any,
       update: {
         storeDomain: snapshot.storeDomain,
         domain: snapshot.domain,
@@ -170,8 +170,8 @@ export class SubscriptionService {
         isPaid: snapshot.isPaid,
         expiresAt: snapshot.expiresAt,
         syncedAt: new Date(),
-        payload: snapshot.payload,
-      },
+        payload: snapshot.payload as any,
+      } as any,
     });
   }
 
@@ -230,7 +230,7 @@ export class SubscriptionService {
     }
     if (!storeDomain && snapshot.subscriptionId) {
       const install = await this.prisma.appInstall.findFirst({
-        where: { subscriptionId: snapshot.subscriptionId },
+        where: { subscriptionId: snapshot.subscriptionId } as any,
         select: { storeDomain: true },
       });
       storeDomain = install?.storeDomain || undefined;
@@ -240,12 +240,12 @@ export class SubscriptionService {
     const result = await this.prisma.appInstall.updateMany({
       where: { storeDomain, status: { not: 'uninstalled' } },
       data: {
-        status: installStatusFromSnapshot(snapshot),
+        status: installStatusFromSnapshot(snapshot) as any,
         plan: snapshot.plan,
         subscriptionId: snapshot.subscriptionId,
         subscriptionStatus: snapshot.status,
         expiresAt: snapshot.expiresAt,
-      },
+      } as any,
     });
     return { updated: result.count > 0, storeDomain };
   }

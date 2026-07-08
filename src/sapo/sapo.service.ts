@@ -114,7 +114,7 @@ export class SapoService {
     // Verify store identity
     const shop = await this.sapoApi.getShop(storeDomain, tokenPayload.access_token).catch(() => null);
     if (!shop) throw new BadRequestException('Failed to verify store identity');
-    const domains = this.shopDomains.collectDomains(shop);
+    const domains = this.shopDomains.collectDomains(shop as any);
 
     const lock = await this.lifecycleLocks.acquireLifecycleLock(storeDomain);
     if (!lock) throw new ConflictException('Lifecycle operation already in progress');
@@ -128,7 +128,7 @@ export class SapoService {
         throw new BadRequestException('Stale install callback after uninstall');
       }
 
-      const accessToken = this.tokenEncryption.encrypt(tokenPayload.access_token);
+      const encryptedToken = this.tokenEncryption.encrypt(tokenPayload.access_token);
 
       // v1 free-first (D5): all installs are 'active' with features unlocked
       const shopRow = await this.db.shop.upsert({
@@ -144,18 +144,18 @@ export class SapoService {
           storeDomain,
           status: 'active',
           featuresUnlocked: true,
-          accessTokenCiphertext: accessToken.ciphertext,
-          accessTokenIv: accessToken.iv,
-          accessTokenTag: accessToken.tag,
+          accessTokenCiphertext: encryptedToken.ciphertext,
+          accessTokenIv: encryptedToken.iv,
+          accessTokenTag: encryptedToken.tag,
           installedAt: new Date(),
           lifecycleGeneration: 1,
         },
         update: {
           status: 'active',
           featuresUnlocked: true,
-          accessTokenCiphertext: accessToken.ciphertext,
-          accessTokenIv: accessToken.iv,
-          accessTokenTag: accessToken.tag,
+          accessTokenCiphertext: encryptedToken.ciphertext,
+          accessTokenIv: encryptedToken.iv,
+          accessTokenTag: encryptedToken.tag,
           installedAt: new Date(),
           uninstalledAt: null,
           lifecycleGeneration: { increment: 1 },

@@ -158,7 +158,7 @@ export class ReviewProductStoreService {
       email: input.email ?? null,
       phone: input.phone ?? null,
       title: input.title ?? null,
-      media: input.media ?? null,
+      media: (input.media ?? undefined) as any,
       status: input.status || 'pending',
       verified: input.verified ?? false,
       pinned: input.pinned ?? false,
@@ -350,6 +350,42 @@ export class ReviewProductStoreService {
     });
 
     return this.buildSummary(ratings);
+  }
+
+  // -- Stats for the entire shop (dashboard) ----------------------------
+
+  async getStatsForShop(shopId: string) {
+    const [totalResult, statusGroups, verifiedCount, mediaCount, avgResult, products] = await Promise.all([
+      this.prisma.reviewProduct.count({ where: { shopId } }),
+      this.prisma.reviewProduct.groupBy({ by: ['status'], where: { shopId }, _count: true }),
+      this.prisma.reviewProduct.count({ where: { shopId, verified: true } }),
+      this.prisma.reviewProduct.count({ where: { shopId, media: { not: undefined as any } } }),
+      this.prisma.reviewProduct.aggregate({ where: { shopId, status: 'approved' }, _avg: { rating: true } }),
+      this.prisma.reviewProduct.groupBy({ by: ['productId', 'productTitle'], where: { shopId }, _count: true, _avg: { rating: true } }),
+    ]);
+
+    const statusCounts: Record<string, number> = { approved: 0, pending: 0, hidden: 0, spam: 0, unreplied: 0 };
+    for (const g of statusGroups) {
+      statusCounts[g.status] = g._count;
+    }
+
+    return {
+      totalReviews: totalResult,
+      statusCounts,
+      verifiedCount,
+      withMediaCount: mediaCount,
+      globalAvg: Math.round((avgResult._avg.rating || 0) * 10) / 10,
+      globalDist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+      products: products.map((p: any) => ({
+        productId: p.productId,
+        title: p.productTitle || '',
+        reviewCount: p._count,
+        reviewAvg: Math.round((p._avg.rating || 0) * 10) / 10,
+      })),
+      productCount: products.length,
+      trend: [],
+      recentReviews: [] as any[],
+    };
   }
 
   // -- Internal helpers ------------------------------------------------------

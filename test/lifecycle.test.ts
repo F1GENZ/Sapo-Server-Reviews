@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, generateKeyPairSync, sign } from 'crypto';

@@ -40,10 +40,10 @@ export class DashboardService {
 
   async getOverview(storeDomain: string): Promise<DashboardOverview> {
     const [reviewStats, qnaStats, recentReviews, recentQuestions] = await Promise.all([
-      this.reviewStore.getStatsForShop(storeDomain).catch((e) => { this.logger.warn(`Review stats failed: ${e.message}`); return null; }),
+      this.reviewStore.getStatsForShop(storeDomain).catch((e: any) => { this.logger.warn(`Review stats failed: ${e.message}`); return null; }),
       this.qnaStore.getStats(storeDomain, '').catch(() => null),
-      this.reviewStore.getAllReviews(storeDomain, { page: 1, limit: 8, sort: 'newest' }).catch(() => ({ items: [], total: 0 })),
-      this.qnaStore.getAllQuestions(storeDomain, { page: 1, limit: 8, sort: 'newest' }).catch(() => ({ items: [], total: 0 })),
+      this.reviewStore.getAllReviews(storeDomain, { page: 1, size: 8, sort: 'newest' }).catch(() => ({ items: [], total: 0 })),
+      this.qnaStore.getAllQuestions(storeDomain, { page: 1, size: 8, sort: 'newest' }).catch(() => ({ items: [], total: 0 })),
     ]);
 
     const totalReviews = reviewStats?.totalReviews ?? 0;
@@ -59,19 +59,19 @@ export class DashboardService {
       responseRate: totalQuestions ? Math.round((totalAnswered / totalQuestions) * 100) : 0,
       globalAvg: reviewStats?.globalAvg ?? 0,
       globalDist: reviewStats?.globalDist ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
-      statusCounts: reviewStats?.statusCounts ?? { approved: 0, pending: 0, hidden: 0, spam: 0, unreplied: 0 },
+      statusCounts: reviewStats?.statusCounts as any ?? { approved: 0, pending: 0, hidden: 0, spam: 0, unreplied: 0 },
       qnaStatusCounts: { all: totalQuestions, pending: 0, hidden: 0, answered: totalAnswered, unanswered: Math.max(0, totalQuestions - totalAnswered) },
       verifiedCount: reviewStats?.verifiedCount ?? 0,
       withMediaCount: reviewStats?.withMediaCount ?? 0,
-      rankedProducts: (reviewStats?.products ?? []).filter(p => p.reviewCount > 0).sort((a, b) => b.reviewCount - a.reviewCount).slice(0, 5).map(p => ({
+      rankedProducts: (reviewStats?.products ?? []).filter((p: any) => p.reviewCount > 0).sort((a: any, b: any) => b.reviewCount - a.reviewCount).slice(0, 5).map((p: any) => ({
         id: p.productId, title: p.title || '', count: p.reviewCount, avg: p.reviewAvg,
       })),
-      recentReviews: (recentReviews?.items ?? []).map(r => ({
+      recentReviews: (recentReviews?.items ?? []).map((r: any) => ({
         id: r.reviewId, rating: r.rating, author: r.author, content: r.content?.slice(0, 200) || '',
         created_at: Number(r.createdAt), productId: r.productId, productTitle: r.productTitle || undefined, productImage: r.productImage || undefined,
         status: r.status, verified: r.verified, hasReply: !!r.reply,
       })),
-      recentQuestions: (recentQuestions?.items ?? []).map(q => ({
+      recentQuestions: (recentQuestions?.items ?? []).map((q: any) => ({
         id: q.questionId, question: q.question?.slice(0, 200) || '', author: q.author, status: q.status,
         answered: !!q.answer, created_at: Number(q.createdAt), productId: q.productId, productTitle: q.productTitle || undefined,
       })),

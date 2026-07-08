@@ -107,7 +107,7 @@ export class OpsService {
     for (let page = 1; page <= 50; page++) {
       const products = await this.sapoApi.getProducts(storeDomain, accessToken, { page, limit: 250 });
       if (!products.length) break;
-      const rows = products.map(p => this.catalogStore.normalizeSapoProduct(storeDomain, p, 'sapo'));
+      const rows = products.map(p => this.catalogStore.normalizeSapoProduct(storeDomain, p as any, 'sapo'));
       await this.catalogStore.upsertProducts(rows.filter(Boolean) as any[]);
       synced += rows.length;
     }

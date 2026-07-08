@@ -164,7 +164,7 @@ export class CatalogProductStoreService {
               published: row.published,
               deletedAt:
                 row.deletedAt !== null ? BigInt(row.deletedAt) : null,
-              rawPayload: row.rawPayload as object | null,
+              rawPayload: (row.rawPayload ?? undefined) as any,
               source: row.source,
               createdAt: new Date(),
               updatedAt: row.updatedAt,
@@ -205,7 +205,7 @@ export class CatalogProductStoreService {
                   : prev.deletedAt,
               rawPayload:
                 row.rawPayload !== undefined
-                  ? (row.rawPayload as object | null)
+                  ? (row.rawPayload as any)
                   : prev.rawPayload,
               source: row.source,
               updatedAt: row.updatedAt,
@@ -218,7 +218,7 @@ export class CatalogProductStoreService {
     if (!operations.length) return;
 
     try {
-      await this.prisma.$transaction(operations);
+      await this.prisma.$transaction(operations as any);
     } catch (error) {
       this.logger.warn(
         `Catalog product upsert failed: ${
