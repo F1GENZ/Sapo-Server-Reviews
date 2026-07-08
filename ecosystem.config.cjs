@@ -6,7 +6,7 @@ module.exports = {
   apps: [
     {
       name: 'f1genz-sapo-api',
-      script: 'server/dist/main.js',
+      script: 'dist/main.js',
       cwd: '.',
       instances: 1,
       exec_mode: 'fork',
@@ -19,7 +19,7 @@ module.exports = {
     },
     {
       name: 'f1genz-sapo-worker',
-      script: 'server/dist/main.js',
+      script: 'dist/main.js',
       cwd: '.',
       instances: 1,
       exec_mode: 'fork',
