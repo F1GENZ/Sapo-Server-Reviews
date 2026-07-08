@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_ENV, AppConfigModule } from './config/app-config.module';
 import type { AppEnv } from './config/env.schema';
+import { CatalogModule } from './catalog/catalog.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
 import { RedisModule } from './redis/redis.module';
@@ -8,7 +9,7 @@ import { IngressRateLimitService } from './common/security/ingress-rate-limit.se
 import { ShopAuthGuard } from './common/guards/shop-auth.guard';
 import { SapoController } from './sapo/sapo.controller';
 import { SapoService } from './sapo/sapo.service';
-import { SapoApiService } from './sapo/sapo-api.service';
+import { SapoApiModule } from './sapo/sapo-api.module';
 import { HmacVerifierService } from './sapo/hmac-verifier.service';
 import { LifecycleLockService } from './sapo/lifecycle-lock.service';
 import { OAuthStateService } from './sapo/oauth-state.service';

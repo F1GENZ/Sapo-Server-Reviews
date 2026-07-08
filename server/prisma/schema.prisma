@@ -174,3 +174,56 @@ model WebhookEvent {
   @@index([resolvedStoreDomain, status, receivedAt])
   @@index([status, nextRetryAt])
 }
+
+model CatalogProduct {
+  id        String  @id @default(cuid())
+  shopId    String
+  productId String
+
+  title       String  @default("")
+  handle      String  @default("")
+  image       String?
+  vendor      String?
+  productType String?  @map("product_type")
+  tags        String?
+  status      String?
+  published   Boolean?
+  deletedAt   BigInt?  @map("deleted_at")
+  rawPayload  Json?    @map("raw_payload")
+  source      String   @default("sapo")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt BigInt   @map("updated_at")
+
+  @@unique([shopId, productId])
+  @@index([shopId])
+  @@index([shopId, deletedAt])
+  @@index([updatedAt])
+  @@map("catalog_products")
+}
+
+model CustomerPurchase {
+  id        String @id @default(cuid())
+  shopId    String  @map("shop_id")
+  productId String  @map("product_id")
+  orderId   String  @map("order_id")
+
+  orderCode         String?  @map("order_code")
+  emailHash         String?  @map("email_hash")
+  phoneHash         String?  @map("phone_hash")
+  financialStatus   String?  @map("financial_status")
+  fulfillmentStatus String?  @map("fulfillment_status")
+  cancelledAt       BigInt?  @map("cancelled_at")
+  refundedAt        BigInt?  @map("refunded_at")
+  purchasedAt       BigInt   @map("purchased_at")
+  rawPayload        Json?    @map("raw_payload")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt BigInt   @map("updated_at")
+
+  @@unique([shopId, productId, orderId])
+  @@index([shopId, productId])
+  @@index([shopId, emailHash])
+  @@index([shopId, phoneHash])
+  @@map("customer_purchases")
+}

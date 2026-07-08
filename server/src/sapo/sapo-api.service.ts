@@ -209,7 +209,8 @@ export class SapoApiService {
 
   async getProducts(storeDomain: string, accessToken: string, params: GetProductsParams = {}): Promise<SapoProduct[]> {
     const qp = this.buildQueryParams(params);
-    const res = await this.fetch(storeDomain, accessToken, false, `/products.json`, undefined);
+    const path = `/products.json${qp.toString() ? '?' + qp.toString() : ''}`;
+    const res = await this.fetch(storeDomain, accessToken, false, path);
     const payload = await res.json() as SapoListResponse<SapoProduct>;
     const key = Object.keys(payload).find((k) => Array.isArray(payload[k]));
     return key ? payload[key] : [];

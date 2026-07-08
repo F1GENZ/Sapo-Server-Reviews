@@ -1,0 +1,219 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { SapoApiService } from '../sapo/sapo-api.service';
+import { CatalogProductStoreService } from './catalog-product-store.service';
+
+const MAX_PAGES = 50;
+const PAGE_LIMIT = 250;
+
+@Injectable()
+export class CatalogSyncService {
+  private readonly logger = new Logger(CatalogSyncService.name);
+
+  constructor(
+    private readonly sapoApi: SapoApiService,
+    private readonly catalogStore: CatalogProductStoreService,
+  ) {}
+
+  async backfillStore(
+    storeDomain: string,
+    accessToken: string,
+  ): Promise<{
+    synced: number;
+    pages: number;
+    totalFromCount: number | null;
+    stopReason: 'completed' | 'max_pages' | 'empty_page';
+  }> {
+    let synced = 0;
+    let pages = 0;
+
+    const totalCount = await this.sapoApi
+      .getProductsCount(storeDomain, accessToken)
+      .catch((error) => {
+        this.logger.warn(
+          `Could not fetch products count for ${storeDomain}: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`,
+        );
+        return null;
+      });
+
+    if (totalCount === 0) {
+      return {
+        synced: 0,
+        pages: 0,
+        totalFromCount: 0,
+        stopReason: 'completed',
+      };
+    }
+
+    let stopReason: 'completed' | 'max_pages' | 'empty_page' = 'max_pages';
+    const seenProductIds = new Set<string>();
+
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const products = await this.sapoApi.getProducts(
+        storeDomain,
+        accessToken,
+        { page, limit: PAGE_LIMIT },
+      );
+
+      if (!products.length) {
+        stopReason = 'empty_page';
+        if (pages === 0 && totalCount !== null) {
+          stopReason = 'completed';
+        }
+        break;
+      }
+
+      const normalized = products
+        .map((product) =>
+          this.catalogStore.normalizeSapoProduct(
+            storeDomain,
+            product as unknown as Record<string, unknown>,
+            'sapo',
+          ),
+        )
+        .filter(
+          (item): item is NonNullable<typeof item> => !!item,
+        );
+
+      for (const item of normalized) {
+        seenProductIds.add(String(item.productId));
+      }
+
+      await this.catalogStore.upsertProducts(normalized);
+      synced += normalized.length;
+      pages += 1;
+
+      if (
+        totalCount !== null &&
+        synced >= totalCount
+      ) {
+        stopReason = 'completed';
+        break;
+      }
+
+      if (products.length < PAGE_LIMIT) {
+        stopReason = 'completed';
+        break;
+      }
+    }
+
+    // Reconcile: mark stale sapo-source products as deleted.
+    if (
+      seenProductIds.size > 0 &&
+      (stopReason === 'completed' || stopReason === 'max_pages')
+    ) {
+      const staleDeleted =
+        await this.catalogStore
+          .markMissingSapoProductsDeleted(
+            storeDomain,
+            Array.from(seenProductIds),
+          )
+          .catch((error) => {
+            this.logger.warn(
+              `Stale product reconciliation failed for ${storeDomain}: ${
+                error instanceof Error ? error.message : 'Unknown error'
+              }`,
+            );
+            return 0;
+          });
+      if (staleDeleted > 0) {
+        this.logger.log(
+          `Marked ${staleDeleted} stale sapo products as deleted for ${storeDomain}`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `Backfill completed for ${storeDomain}: synced=${synced} pages=${pages} stopReason=${stopReason}`,
+    );
+
+    return {
+      synced,
+      pages,
+      totalFromCount: totalCount,
+      stopReason,
+    };
+  }
+
+  async handleProductWebhook(
+    storeDomain: string,
+    productId: string,
+    action: string,
+  ): Promise<void> {
+    // Webhook topics: products/create, products/update, products/delete
+    if (action === 'delete' || action === 'products/delete') {
+      await this.catalogStore.softDeleteProduct(storeDomain, productId);
+      this.logger.log(
+        `Soft-deleted catalog product ${productId} for ${storeDomain} via webhook`,
+      );
+      return;
+    }
+
+    // Resolve access token from the session. The caller (webhook handler)
+    // is expected to have already validated the store and provided a token.
+    // If called without a token, log a warning and skip.
+    // For create/update, we need the access token to fetch the full product.
+    // Since we don't have it here directly, we make it an optional parameter
+    // but document that it's needed for full fidelity.
+    this.logger.log(
+      `Webhook product ${action} for ${productId} at ${storeDomain}: full fetch requires access token`,
+    );
+  }
+
+  /**
+   * Handle a product webhook with a resolved access token, fetching the
+   * full product from the Sapo API and upserting it into the catalog.
+   */
+  async handleProductWebhookWithToken(
+    storeDomain: string,
+    productId: string,
+    action: string,
+    accessToken: string,
+  ): Promise<void> {
+    if (action === 'delete' || action === 'products/delete') {
+      await this.catalogStore.softDeleteProduct(storeDomain, productId);
+      this.logger.log(
+        `Soft-deleted catalog product ${productId} for ${storeDomain} via webhook`,
+      );
+      return;
+    }
+
+    try {
+      const product = await this.sapoApi.getProduct(
+        storeDomain,
+        accessToken,
+        productId,
+      );
+      const normalized = this.catalogStore.normalizeSapoProduct(
+        storeDomain,
+        product as unknown as Record<string, unknown>,
+        'webhook',
+      );
+      if (normalized) {
+        await this.catalogStore.upsertProduct(normalized);
+        this.logger.log(
+          `Upserted catalog product ${productId} for ${storeDomain} via webhook ${action}`,
+        );
+      }
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('404')
+      ) {
+        // Product was likely deleted between webhook delivery and fetch.
+        await this.catalogStore.softDeleteProduct(storeDomain, productId);
+        this.logger.log(
+          `Product ${productId} not found (404) for ${storeDomain}, soft-deleted`,
+        );
+        return;
+      }
+      this.logger.warn(
+        `Failed to handle product webhook for ${productId} at ${storeDomain}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+      throw error;
+    }
+  }
+}
