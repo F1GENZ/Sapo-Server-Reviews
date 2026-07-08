@@ -23,7 +23,7 @@ import { WebhookService } from './sapo/webhook.service';
 import { RedisService } from './redis/redis.service';
 
 @Module({
-  imports: [AppConfigModule, RedisModule, DatabaseModule],
+  imports: [AppConfigModule, RedisModule, DatabaseModule, SapoApiModule, CatalogModule],
   controllers: [SapoController, HealthController],
   providers: [
     {
@@ -33,7 +33,6 @@ import { RedisService } from './redis/redis.service';
     },
     ShopAuthGuard,
     SapoService,
-    SapoApiService,
     HmacVerifierService,
     LifecycleLockService,
     OAuthStateService,
