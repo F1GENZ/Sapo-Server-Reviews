@@ -1,7 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { CatalogSyncService } from '../catalog/catalog-sync.service';
 import { PrismaService } from '../database/prisma.service';
 import { HmacVerifierService } from './hmac-verifier.service';
+import { SapoService } from './sapo.service';
 import { normalizeShopDomain, ShopDomainService } from './shop-domain.service';
 import { SubscriptionService } from './subscription.service';
 import { UninstallService } from './uninstall.service';
@@ -41,6 +43,7 @@ const redactHeaders = (headers: Record<string, unknown>): Record<string, unknown
 @Injectable()
 export class WebhookService {
   private readonly db: any;
+  private readonly logger = new Logger(WebhookService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -48,6 +51,8 @@ export class WebhookService {
     private readonly shopDomains: ShopDomainService,
     private readonly subscriptions: SubscriptionService,
     private readonly uninstallService: UninstallService,
+    private readonly sapo: SapoService,
+    private readonly catalogSync: CatalogSyncService,
   ) {
     this.db = prisma as any;
   }
@@ -238,7 +243,7 @@ export class WebhookService {
         }
         result = { ok: true, topic: normalizedTopic, storeDomain: identity.storeDomain };
       } else if (normalizedTopic.startsWith('products/') && identity.storeDomain) {
-        // Phase 08: catalog sync will consume these events
+        await this.syncCatalogProduct(normalizedTopic, identity.storeDomain, payload);
         result = { ok: true, topic: normalizedTopic, storeDomain: identity.storeDomain, queued: true };
       } else if (normalizedTopic.startsWith('orders/') && identity.storeDomain) {
         // Phase 08: order sync will consume these events
@@ -257,5 +262,17 @@ export class WebhookService {
       });
       throw error;
     }
+  }
+
+  private async syncCatalogProduct(topic: string, storeDomain: string, payload: Record<string, unknown>): Promise<void> {
+    const productId = asString(payload.id) || asString(payload.product_id) || asString(payload.productId);
+    if (!productId) {
+      this.logger.warn(`Catalog sync skipped: no product id in ${topic} payload for ${storeDomain}`);
+      return;
+    }
+    // Full product fetch needs the store access token; failures propagate so
+    // the webhook is marked failed and Sapo retries (reconciliation).
+    const accessToken = await this.sapo.resolveAccessToken(storeDomain);
+    await this.catalogSync.handleProductWebhookWithToken(storeDomain, productId, topic, accessToken);
   }
 }

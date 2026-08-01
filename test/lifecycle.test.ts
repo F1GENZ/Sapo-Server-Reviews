@@ -239,6 +239,8 @@ test('app/uninstalled re-delivery after domain tombstone resolves via payload st
     shopDomains,
     { buildSnapshot: () => ({}), saveSnapshot: async () => {}, applySnapshotToInstall: async () => ({ updated: false }) },
     { uninstall: async (storeDomain) => ({ storeDomain, uninstalled: true, domainsCleared: 0 }) },
+    { resolveAccessToken: async () => 'access-token' },
+    { handleProductWebhookWithToken: async () => {} },
   );
 
   const payload = { store_domain: 'demo.mysapo.net', id: 'shop_1' };
@@ -274,6 +276,8 @@ test('concurrent duplicate webhook with same idempotency key returns inProgress 
     shopDomains,
     { buildSnapshot: () => ({}), saveSnapshot: async () => {}, applySnapshotToInstall: async () => ({ updated: false }) },
     { uninstall: async () => ({ uninstalled: true, domainsCleared: 0 }) },
+    { resolveAccessToken: async () => 'access-token' },
+    { handleProductWebhookWithToken: async () => {} },
   );
 
   const makeInput = () => {

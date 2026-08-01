@@ -147,12 +147,9 @@ export class SapoController {
 
   @Post('/oauth/install/webhooks')
   async webhookPost(@Req() req: RawRequest, @Body() body: unknown, @Query() query: Record<string, unknown>, @Headers() headers: Record<string, unknown>) {
-    await this.rateLimit.assertAllowed(
-      'webhook-post',
-      clientFingerprint(req),
-      this.env.WEBHOOK_RATE_LIMIT_WINDOW_SECONDS,
-      this.env.WEBHOOK_RATE_LIMIT_MAX,
-    );
+    // Webhooks are HMAC-authenticated and idempotent; Sapo servers share one
+    // source IP, so IP rate limiting here would collapse all stores into one
+    // bucket and drop legitimate webhooks.
     return this.webhooks.handle({ headers, query, body, rawBody: req.rawBody });
   }
 

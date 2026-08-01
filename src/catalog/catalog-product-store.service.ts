@@ -312,40 +312,30 @@ export class CatalogProductStoreService {
     sapoActive: number;
     nonSapoActive: number;
   }> {
-    const all = await this.prisma.catalogProduct.findMany({
-      where: { shopId },
-      select: {
-        source: true,
-        deletedAt: true,
-        updatedAt: true,
-      },
-    });
+    const [total, deleted, lastUpdatedAgg, sourceGroups, deletedGroups] = await Promise.all([
+      this.prisma.catalogProduct.count({ where: { shopId } }),
+      this.prisma.catalogProduct.count({ where: { shopId, deletedAt: { not: null } } }),
+      this.prisma.catalogProduct.aggregate({ where: { shopId }, _max: { updatedAt: true } }),
+      this.prisma.catalogProduct.groupBy({ by: ['source'], where: { shopId }, _count: true }),
+      this.prisma.catalogProduct.groupBy({ by: ['source'], where: { shopId, deletedAt: { not: null } }, _count: true }),
+    ]);
 
-    const total = all.length;
-    const deleted = all.filter((r) => r.deletedAt !== null).length;
     const active = total - deleted;
     const lastUpdated =
-      all.length > 0
-        ? Number(
-            all.reduce(
-              (max, r) => (r.updatedAt > max ? r.updatedAt : max),
-              BigInt(0),
-            ),
-          )
-        : null;
+      lastUpdatedAgg._max.updatedAt != null ? Number(lastUpdatedAgg._max.updatedAt) : null;
 
     const sources: Record<string, number> = {};
-    const activeSources: Record<string, number> = {};
     const deletedSources: Record<string, number> = {};
+    for (const g of sourceGroups) {
+      sources[g.source || 'unknown'] = g._count;
+    }
+    for (const g of deletedGroups) {
+      deletedSources[g.source || 'unknown'] = g._count;
+    }
 
-    for (const row of all) {
-      const src = row.source || 'unknown';
-      sources[src] = (sources[src] || 0) + 1;
-      if (row.deletedAt === null) {
-        activeSources[src] = (activeSources[src] || 0) + 1;
-      } else {
-        deletedSources[src] = (deletedSources[src] || 0) + 1;
-      }
+    const activeSources: Record<string, number> = {};
+    for (const [srcKey, count] of Object.entries(sources)) {
+      activeSources[srcKey] = count - (deletedSources[srcKey] || 0);
     }
 
     const sapoActive = activeSources.sapo || 0;

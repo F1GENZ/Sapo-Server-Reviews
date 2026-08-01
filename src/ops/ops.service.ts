@@ -78,7 +78,7 @@ export class OpsService {
 
   async resyncConfig(storeDomain: string) {
     const accessToken = await this.sapo.resolveAccessToken(storeDomain);
-    const config = { apiUrl: process.env.API_BASE_URL || '', storeDomain };
+    const config = { apiUrl: this.env.API_BASE_URL.replace(/\/+$/, ''), storeDomain };
     let configError: string | null = null;
     try {
       await this.storefront.writeStorefrontConfig(storeDomain, accessToken);
@@ -96,7 +96,7 @@ export class OpsService {
     const { WEBHOOK_SUBSCRIBE_TOPICS } = await import('../sapo/webhook-topic-normalizer');
     for (const topic of WEBHOOK_SUBSCRIBE_TOPICS) {
       try {
-        await this.sapoApi.createWebhook(storeDomain, accessToken, topic, `${process.env.API_BASE_URL}/api/oauth/install/webhooks`);
+        await this.sapoApi.createWebhook(storeDomain, accessToken, topic, new URL('/api/oauth/install/webhooks', this.env.API_BASE_URL).toString());
         results.push(`${topic}: ok`);
       } catch (e) {
         results.push(`${topic}: ${e instanceof Error ? e.message : 'failed'}`);

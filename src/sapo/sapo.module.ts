@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { CatalogModule } from '../catalog/catalog.module';
 import { DatabaseModule } from '../database/database.module';
 import { StorefrontModule } from '../storefront/storefront.module';
 import { SapoApiModule } from './sapo-api.module';
@@ -16,7 +17,7 @@ import { WebhookService } from './webhook.service';
 
 @Global()
 @Module({
-  imports: [DatabaseModule, StorefrontModule, SapoApiModule],
+  imports: [DatabaseModule, StorefrontModule, SapoApiModule, CatalogModule],
   providers: [
     SapoService,
     HmacVerifierService,
