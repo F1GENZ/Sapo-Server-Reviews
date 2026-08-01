@@ -47,15 +47,18 @@ async function bootstrap() {
       normalizedOrigin = '';
     }
     const originAllowed = Boolean(normalizedOrigin && allowedOrigins.has(normalizedOrigin));
-    if (originAllowed) {
-      res.setHeader('Access-Control-Allow-Origin', normalizedOrigin);
+    // Public storefront endpoints and static assets must work from any storefront
+    // custom domain, so echo any origin for them instead of gating to admin origins.
+    const isPublicPath = req.path.startsWith('/api/public') || req.path.startsWith('/storefront');
+    if (originAllowed || (isPublicPath && origin)) {
+      res.setHeader('Access-Control-Allow-Origin', originAllowed ? normalizedOrigin : origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Accept,Authorization,Content-Type,Origin,Referer,X-Store-Domain,Store-Domain,X-Sapo-Hmac,X-Sapo-HmacSha256,X-Sapo-Topic');
       res.setHeader('Vary', 'Origin');
     }
     if (req.method === 'OPTIONS') {
-      res.status(origin && !originAllowed ? 403 : 204).end();
+      res.status(origin && !originAllowed && !isPublicPath ? 403 : 204).end();
       return;
     }
     next();

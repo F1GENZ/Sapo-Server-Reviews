@@ -46,6 +46,9 @@ export type AppEnv = {
   WEBHOOK_RATE_LIMIT_MAX: number;
   SESSION_EXCHANGE_RATE_LIMIT_MAX: number;
 
+  PUBLIC_WRITE_RATE_LIMIT_WINDOW_SECONDS: number;
+  PUBLIC_WRITE_RATE_LIMIT_MAX: number;
+
   READINESS_TOKEN: string;
   BUILD_SHA: string;
 };
@@ -302,6 +305,20 @@ export const loadEnv = (env: RawEnv = process.env): AppEnv => {
       60,
       { min: 1 },
     ),
+    PUBLIC_WRITE_RATE_LIMIT_WINDOW_SECONDS: parseInteger(
+      trim(env.PUBLIC_WRITE_RATE_LIMIT_WINDOW_SECONDS),
+      'PUBLIC_WRITE_RATE_LIMIT_WINDOW_SECONDS',
+      errors,
+      60,
+      { min: 1 },
+    ),
+    PUBLIC_WRITE_RATE_LIMIT_MAX: parseInteger(
+      trim(env.PUBLIC_WRITE_RATE_LIMIT_MAX),
+      'PUBLIC_WRITE_RATE_LIMIT_MAX',
+      errors,
+      20,
+      { min: 1 },
+    ),
 
     READINESS_TOKEN: trim(env.READINESS_TOKEN),
     BUILD_SHA: trim(env.BUILD_SHA) || 'local',
@@ -374,6 +391,8 @@ export const loadEnv = (env: RawEnv = process.env): AppEnv => {
         'WEBHOOK_RATE_LIMIT_WINDOW_SECONDS',
         'WEBHOOK_RATE_LIMIT_MAX',
         'SESSION_EXCHANGE_RATE_LIMIT_MAX',
+        'PUBLIC_WRITE_RATE_LIMIT_WINDOW_SECONDS',
+        'PUBLIC_WRITE_RATE_LIMIT_MAX',
       ],
       errors,
     );
@@ -396,6 +415,8 @@ export const loadEnv = (env: RawEnv = process.env): AppEnv => {
         'WEBHOOK_RATE_LIMIT_WINDOW_SECONDS',
         'WEBHOOK_RATE_LIMIT_MAX',
         'SESSION_EXCHANGE_RATE_LIMIT_MAX',
+        'PUBLIC_WRITE_RATE_LIMIT_WINDOW_SECONDS',
+        'PUBLIC_WRITE_RATE_LIMIT_MAX',
       ],
       errors,
     );

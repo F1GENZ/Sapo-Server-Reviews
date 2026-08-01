@@ -12,11 +12,16 @@ import {
   Res,
   BadRequestException,
   DefaultValuePipe,
+  Inject,
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { QnaService } from './qna.service';
 import { NumericIdPipe } from '../common/pipes/numeric-id.pipe';
+import { APP_ENV } from '../config/app-config.module';
+import type { AppEnv } from '../config/env.schema';
+import { IngressRateLimitService } from '../common/security/ingress-rate-limit.service';
+import { clientFingerprint } from '../common/security/client-fingerprint';
 
 const STORE_DOMAIN_RE = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
 
@@ -43,9 +48,23 @@ function setPublicCorsHeaders(req: Request, res: Response): void {
   }
 }
 
-@Controller('public/qna')
+@Controller('api/public/qna')
 export class PublicQnaController {
-  constructor(private readonly qnaService: QnaService) {}
+  constructor(
+    private readonly qnaService: QnaService,
+    @Inject(APP_ENV) private readonly env: AppEnv,
+    private readonly rateLimit: IngressRateLimitService,
+  ) {}
+
+  /** Rate-limit public question submissions per store + client. */
+  private async assertPublicRate(req: Request, storeDomain: string): Promise<void> {
+    await this.rateLimit.assertAllowed(
+      'public-qna:submit',
+      `${storeDomain}|${clientFingerprint(req)}`,
+      this.env.PUBLIC_WRITE_RATE_LIMIT_WINDOW_SECONDS,
+      this.env.PUBLIC_WRITE_RATE_LIMIT_MAX,
+    );
+  }
 
   /** Extract and validate the store domain from header or query. */
   private extractStoreDomain(header?: string, query?: string): string {
@@ -87,6 +106,7 @@ export class PublicQnaController {
   @Post(':productId')
   async submitQuestion(
     @Param('productId', NumericIdPipe) productId: string,
+    @Req() req: Request,
     @Body()
     body: {
       author: string;
@@ -97,6 +117,7 @@ export class PublicQnaController {
     @Query('storeDomain') storeDomainQuery?: string,
   ) {
     const storeDomain = this.extractStoreDomain(storeDomainHeader, storeDomainQuery);
+    await this.assertPublicRate(req, storeDomain);
 
     // Validate author
     if (

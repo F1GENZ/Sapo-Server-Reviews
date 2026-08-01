@@ -4,6 +4,8 @@ import { DatabaseModule } from '../database/database.module';
 import { PurchaseModule } from '../purchase/purchase.module';
 import { RedisModule } from '../redis/redis.module';
 import { SapoApiModule } from '../sapo/sapo-api.module';
+import { ReviewController } from './review.controller';
+import { PublicReviewController } from './public-review.controller';
 import { ReviewProductStoreService } from './review-product-store.service';
 import { ReviewService } from './review.service';
 
@@ -22,6 +24,7 @@ import { ReviewService } from './review.service';
     CatalogModule,
     PurchaseModule,
   ],
+  controllers: [ReviewController, PublicReviewController],
   providers: [ReviewProductStoreService, ReviewService],
   exports: [ReviewProductStoreService, ReviewService],
 })

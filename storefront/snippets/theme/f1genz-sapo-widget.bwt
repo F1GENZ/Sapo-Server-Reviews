@@ -33,9 +33,9 @@
 {{# ------ product.bwt (reviews section) ------ #}}
 <div class="f1genz-sapo-review-section">
   <f1genz-reviews
-    product="{{ product.id }}"
-    store="{{ shop.domain }}"
-    {{ if customer }}email="{{ customer.email }}"{{ endif }}
+    product-id="{{ product.id }}"
+    storeDomain="{{ shop.domain }}"
+    {{ if customer }}customer-email="{{ customer.email }}"{{ endif }}
   ></f1genz-reviews>
 </div>
 
@@ -48,8 +48,8 @@
 {{# ------ product.bwt (Q&A section) ------ #}}
 <div class="f1genz-sapo-review-section">
   <f1genz-qna-panel
-    product="{{ product.id }}"
-    store="{{ shop.domain }}"
+    product-id="{{ product.id }}"
+    storeDomain="{{ shop.domain }}"
   ></f1genz-qna-panel>
 </div>
 
@@ -67,10 +67,10 @@
   {{ assign count = summaryObj.count | default: 0 }}
   {{ if count > 0 }}
     <f1genz-rating-badge
-      product="{{ product.id }}"
-      store="{{ shop.domain }}"
-      avg="{{ avg }}"
-      count="{{ count }}"
+      product-id="{{ product.id }}"
+      storeDomain="{{ shop.domain }}"
+      avg-rating="{{ avg }}"
+      review-count="{{ count }}"
       distribution='{{ publicSummary }}'
     ></f1genz-rating-badge>
   {{ endif }}

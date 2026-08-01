@@ -16,6 +16,7 @@ import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env.schema';
 import { IngressRateLimitService } from '../common/security/ingress-rate-limit.service';
 import { isTrustedUnsafeOrigin } from '../common/security/origin-policy';
+import { clientFingerprint } from '../common/security/client-fingerprint';
 import { ShopAuthGuard } from '../common/guards/shop-auth.guard';
 import { SapoService, type AuthStartResponse, type HandoffResponse } from './sapo.service';
 import { HmacVerifierService } from './hmac-verifier.service';
@@ -30,9 +31,6 @@ const firstQuery = (value: unknown): string | undefined => {
   if (Array.isArray(value) && typeof value[0] === 'string') return value[0];
   return undefined;
 };
-
-const clientFingerprint = (req: Request): string =>
-  String(req.ip || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
 
 const wantsBrowserRedirect = (req: Request): boolean => {
   const accept = String(req.headers.accept || '').toLowerCase();

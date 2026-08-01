@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { APP_ENV } from '../config/app-config.module';
+import type { AppEnv } from '../config/env.schema';
 import { PrismaService } from '../database/prisma.service';
 import { SapoApiService } from './sapo-api.service';
 import { WEBHOOK_SUBSCRIBE_TOPICS } from './webhook-topic-normalizer';
@@ -12,15 +14,20 @@ export type WebhookRegistrationResult = {
 export class WebhookRegistrationService {
   constructor(
     private readonly sapoApi: SapoApiService,
+    @Inject(APP_ENV) private readonly env: AppEnv,
     private readonly prisma?: PrismaService,
   ) {}
+
+  private webhookReceiverUrl(): string {
+    return new URL('/api/oauth/install/webhooks', this.env.API_BASE_URL).toString();
+  }
 
   async registerForInstall(storeDomain: string, accessToken: string): Promise<WebhookRegistrationResult> {
     const errors: string[] = [];
 
     for (const topic of WEBHOOK_SUBSCRIBE_TOPICS) {
       try {
-        await this.sapoApi.createWebhook(storeDomain, accessToken, topic, `${process.env.API_BASE_URL}/api/webhooks`);
+        await this.sapoApi.createWebhook(storeDomain, accessToken, topic, `${process.env.API_BASE_URL}/api/oauth/install/webhooks`);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Webhook registration failed';
         errors.push(`${topic}: ${message}`);

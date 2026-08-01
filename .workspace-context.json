@@ -1,0 +1,11 @@
+{
+  "kind": "app",
+  "platform": "sapo",
+  "branch": "f1genz",
+  "verification": "verified",
+  "components": {
+    "server": "nestjs-api",
+    "worker": "background-worker",
+    "storefront": "liquid-snippets"
+  }
+}

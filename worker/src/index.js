@@ -15,6 +15,9 @@ export default {
     const url = new URL(request.url);
     const key = url.pathname.slice(1);
     if (!key) return jsonResponse({ error: 'Missing object key' }, 400);
+    if (!key.startsWith('reviews/') || key.includes('..') || /[\u0000-\u001f]/.test(key)) {
+      return jsonResponse({ error: 'Invalid object key' }, 400);
+    }
     if (!env.R2_BUCKET) return jsonResponse({ error: 'R2 bucket is not configured' }, 500);
 
     const contentType = request.headers.get('Content-Type') || 'application/octet-stream';
@@ -37,7 +40,7 @@ export default {
       const cdnUrl = `https://${env.CDN_DOMAIN}/${key}`;
       return jsonResponse({ success: true, cdnUrl }, 200);
     } catch (err) {
-      return jsonResponse({ error: err.message }, 500);
+      return jsonResponse({ error: 'Upload failed' }, 500);
     }
   },
 };

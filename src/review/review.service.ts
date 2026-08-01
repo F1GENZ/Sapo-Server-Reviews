@@ -172,6 +172,14 @@ const toDomainReview = (row: {
   updated_at: toNum(row.updatedAt),
 });
 
+/** Convert a Prisma row to a public Review shape with no contact PII (email/phone). */
+export const toPublicReview = (row: Parameters<typeof toDomainReview>[0]): Review => {
+  const review = toDomainReview(row);
+  delete review.email;
+  delete review.phone;
+  return review;
+};
+
 /** Convert a Prisma row to ReviewListItem (includes product metadata) */
 const toReviewListItem = (row: {
   reviewId: string;
@@ -484,7 +492,8 @@ export class ReviewService {
 
       await this.syncPublicSummary(storeDomain, token, productId);
 
-      return toDomainReview(existing);
+      const updated = await this.reviewStore.getReview(shopId, productId, reviewId);
+      return updated ? toDomainReview(updated) : toDomainReview(existing);
     } finally {
       await this.releaseLock(shopId, productId, lockToken);
     }
@@ -672,7 +681,7 @@ export class ReviewService {
     ]);
 
     return {
-      items: (items as any[]).map((row: any) => toDomainReview(row)),
+      items: (items as any[]).map((row: any) => toPublicReview(row)),
       total,
       page,
       pageSize,
@@ -687,6 +696,46 @@ export class ReviewService {
   ): Promise<RatingSummary> {
     const install = await this.resolveInstall(storeDomain);
     return this.reviewStore.calculatePublicSummary(install.shopId, productId);
+  }
+
+  // ─── getPublicWidgetConfig (storefront, no admin token) ────────
+
+  async getPublicWidgetConfig(storeDomain: string): Promise<WidgetConfig> {
+    return this.getWidgetConfig('', storeDomain);
+  }
+
+  // ─── getPublicSummaries (storefront batch) ──────────────────────
+
+  async getPublicSummaries(
+    storeDomain: string,
+    productIds: string[],
+  ): Promise<Record<string, RatingSummary>> {
+    const install = await this.resolveInstall(storeDomain);
+    const out: Record<string, RatingSummary> = {};
+    const unique = [...new Set(productIds.filter(Boolean))].slice(0, 100);
+    await Promise.all(unique.map(async (pid) => {
+      try {
+        out[pid] = await this.reviewStore.calculatePublicSummary(install.shopId, pid);
+      } catch {
+        out[pid] = EMPTY_SUMMARY();
+      }
+    }));
+    return out;
+  }
+
+  // ─── checkPurchaseEligibility (storefront) ──────────────────────
+
+  async checkPurchaseEligibility(
+    storeDomain: string,
+    productId: string,
+    identity: { email?: string; phone?: string },
+  ): Promise<{ eligible: boolean; reason: string }> {
+    const install = await this.resolveInstall(storeDomain);
+    const email = String(identity?.email || '').trim();
+    const phone = String(identity?.phone || '').trim();
+    if (!email && !phone) return { eligible: false, reason: 'missing_identity' };
+    const eligible = await this.purchaseStore.hasPurchasedProduct(install.shopId, productId, { email, phone });
+    return { eligible, reason: eligible ? 'verified' : 'not_purchased' };
   }
 
   // ─── listAllReviews (admin cross-product listing) ────────────────

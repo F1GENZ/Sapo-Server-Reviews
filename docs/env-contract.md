@@ -107,6 +107,8 @@ Redis production paths must use SCAN or indexed keys, never `KEYS`.
 | `WEBHOOK_RATE_LIMIT_WINDOW_SECONDS` | Yes | `60` | Integer >= 1. |
 | `WEBHOOK_RATE_LIMIT_MAX` | Yes | `300` | Integer >= 1. |
 | `SESSION_EXCHANGE_RATE_LIMIT_MAX` | Yes | `60` | Integer >= 1. |
+| `PUBLIC_WRITE_RATE_LIMIT_WINDOW_SECONDS` | Yes | `60` | Integer >= 1. Window for public review/question submissions per store + client. |
+| `PUBLIC_WRITE_RATE_LIMIT_MAX` | Yes | `20` | Integer >= 1. Max submissions allowed per window. |
 
 ### Readiness
 
@@ -125,7 +127,7 @@ Server must refuse to start in `NODE_ENV=production` when any of these are missi
 - Sessions: app session secret and TTLs.
 - Redis: host, port, prefix.
 - DB: `DATABASE_URL`, `DIRECT_URL`, `DATA_ENCRYPTION_KEY`.
-- Public ingress limits: all auth/webhook/session exchange rate-limit variables.
+- Public ingress limits: all auth/webhook/session exchange rate-limit variables, plus `PUBLIC_WRITE_RATE_LIMIT_WINDOW_SECONDS` and `PUBLIC_WRITE_RATE_LIMIT_MAX` for public storefront write endpoints.
 - Webhook: explicit `HRV_WEBHOOK_AUTO_SUBSCRIBE`, `HRV_WEBHOOK_SECRET`, `HRV_WEBHOOK_VERIFY_TOKEN`, and `HRV_WEBHOOK_URL` when auto subscribe is true.
 - Readiness: `READINESS_TOKEN`.
 

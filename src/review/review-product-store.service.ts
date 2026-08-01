@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import type { RatingSummary } from './interfaces/review.interface';
 
@@ -359,7 +360,7 @@ export class ReviewProductStoreService {
       this.prisma.reviewProduct.count({ where: { shopId } }),
       this.prisma.reviewProduct.groupBy({ by: ['status'], where: { shopId }, _count: true }),
       this.prisma.reviewProduct.count({ where: { shopId, verified: true } }),
-      this.prisma.reviewProduct.count({ where: { shopId, media: { not: undefined as any } } }),
+      this.prisma.reviewProduct.count({ where: { shopId, media: { not: Prisma.DbNull } } }),
       this.prisma.reviewProduct.aggregate({ where: { shopId, status: 'approved' }, _avg: { rating: true } }),
       this.prisma.reviewProduct.groupBy({ by: ['productId', 'productTitle'], where: { shopId }, _count: true, _avg: { rating: true } }),
     ]);

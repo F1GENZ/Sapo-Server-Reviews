@@ -1,3 +1,16 @@
+---
+title: "Build F1GENZ Review Sapo"
+description: "Greenfield migration plan from Haravan reference patterns to a standalone Sapo build."
+status: pending
+priority: P1
+branch: "master"
+tags: ["migration", "sapo"]
+blockedBy: ["260709-0155-review-finding-stabilization"]
+blocks: []
+createdBy: "manual"
+source: legacy-plan
+---
+
 # Plan — Build "F1GENZ Review Sapo" (new standalone project)
 
 Status: **DRAFT (plan-only)** — decisions D1+D3 resolved; D2 pending Phase 1 discovery

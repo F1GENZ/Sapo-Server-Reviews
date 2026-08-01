@@ -83,6 +83,14 @@ const toDomainQuestion = (row: QnaQuestionRecord): Question => ({
   source_raw_json: row.sourceRawJson || undefined,
 });
 
+/** Convert a Prisma row to a public Question shape with no contact PII (email/phone). */
+export const toPublicQuestion = (row: QnaQuestionRecord): Question => {
+  const question = toDomainQuestion(row);
+  delete question.email;
+  delete question.phone;
+  return question;
+};
+
 /** Convert a Prisma row to QuestionListItem (includes product metadata) */
 const toQuestionListItem = (row: QnaQuestionRecord): QuestionListItem => ({
   ...toDomainQuestion(row),
@@ -385,7 +393,7 @@ export class QnaService {
     ]);
 
     return {
-      items: (items as QnaQuestionRecord[]).map((row) => toDomainQuestion(row)),
+      items: (items as QnaQuestionRecord[]).map((row) => toPublicQuestion(row)),
       total,
       page,
       pageSize,

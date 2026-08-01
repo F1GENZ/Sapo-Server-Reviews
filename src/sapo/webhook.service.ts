@@ -115,7 +115,7 @@ export class WebhookService {
     const compatibilityStoreDomain = this.compatibilityStoreDomain(input);
     const domainIdentity = await this.storeDomainFromDomains(input, payload);
 
-    if (payloadStoreDomain && domainIdentity.domain && !domainIdentity.storeDomain && topic !== 'app/charge') {
+    if (payloadStoreDomain && domainIdentity.domain && !domainIdentity.storeDomain && topic !== 'app/charge' && topic !== 'app/uninstalled') {
       throw new BadRequestException('Webhook domain is not mapped to an active install');
     }
     if (payloadStoreDomain && domainIdentity.storeDomain && payloadStoreDomain !== domainIdentity.storeDomain) {
@@ -155,8 +155,11 @@ export class WebhookService {
     const payload = this.getPayload(input.body);
     const identity = await this.resolveIdentity(input, payload, normalizedTopic);
 
-    if (normalizedTopic !== 'app/charge' && !identity.storeDomain) {
+    if (normalizedTopic !== 'app/charge' && !identity.storeDomain && normalizedTopic !== 'app/uninstalled') {
       throw new BadRequestException('Missing webhook storeDomain');
+    }
+    if (normalizedTopic === 'app/uninstalled' && !identity.storeDomain) {
+      identity.storeDomain = this.payloadStoreDomain(payload) || null;
     }
 
     const hash = payloadHash(payload);
@@ -191,14 +194,15 @@ export class WebhookService {
         where: { idempotencyKey },
         select: { id: true, status: true },
       }).catch(() => null);
-      if (existing && ['received', 'failed'].includes(String(existing.status))) {
+      if (existing && ['received', 'processing'].includes(String(existing.status))) {
+        // Winner already holds the idempotency key and is mid-flight — do not run again.
+        return { ok: true, inProgress: true, eventId: existing.id, topic: normalizedTopic };
+      } else if (existing && String(existing.status) === 'failed') {
         await this.db.webhookEvent.update({
           where: { id: existing.id },
           data: { status: 'received', lastError: null, nextRetryAt: null },
         }).catch(() => undefined);
         event = { id: String(existing.id), status: 'received' };
-      } else if (existing && String(existing.status) === 'processing') {
-        return { ok: true, inProgress: true, eventId: existing.id, topic: normalizedTopic };
       } else if (existing) {
         return { ok: true, duplicate: true, eventId: existing.id, topic: normalizedTopic };
       } else {

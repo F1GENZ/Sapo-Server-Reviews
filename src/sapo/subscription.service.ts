@@ -228,23 +228,28 @@ export class SubscriptionService {
       });
       storeDomain = domain?.storeDomain || undefined;
     }
-    if (!storeDomain && snapshot.subscriptionId) {
-      const install = await this.prisma.appInstall.findFirst({
-        where: { subscriptionId: snapshot.subscriptionId } as any,
-        select: { storeDomain: true },
-      });
-      storeDomain = install?.storeDomain || undefined;
-    }
+    // Note: subscriptionId is not an AppInstall column, so it cannot be used
+    // to recover a store domain here. Correlation relies on storeDomain/domain,
+    // both of which are derived from the webhook payload by buildSnapshot.
     if (!storeDomain) return { updated: false };
+
+    const existing = await this.prisma.appInstall.findUnique({
+      where: { storeDomain },
+      select: { metadata: true },
+    }).catch(() => null);
+    const metadata = (existing?.metadata as Record<string, unknown> | null) || {};
+    metadata.subscription = {
+      subscriptionId: snapshot.subscriptionId ?? null,
+      plan: snapshot.plan,
+      subscriptionStatus: snapshot.status,
+      expiresAt: snapshot.expiresAt ? snapshot.expiresAt.toISOString() : null,
+    };
 
     const result = await this.prisma.appInstall.updateMany({
       where: { storeDomain, status: { not: 'uninstalled' } },
       data: {
         status: installStatusFromSnapshot(snapshot) as any,
-        plan: snapshot.plan,
-        subscriptionId: snapshot.subscriptionId,
-        subscriptionStatus: snapshot.status,
-        expiresAt: snapshot.expiresAt,
+        metadata,
       } as any,
     });
     return { updated: result.count > 0, storeDomain };

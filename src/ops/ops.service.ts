@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { APP_ENV } from '../config/app-config.module';
+import type { AppEnv } from '../config/env.schema';
 import { SapoService } from '../sapo/sapo.service';
 import { SapoApiService } from '../sapo/sapo-api.service';
 import { CatalogProductStoreService } from '../catalog/catalog-product-store.service';
@@ -6,12 +8,14 @@ import { ReviewProductStoreService } from '../review/review-product-store.servic
 import { QnaStoreService } from '../qna/qna-store.service';
 import { PurchaseStoreService } from '../purchase/purchase-store.service';
 import { PrismaService } from '../database/prisma.service';
+import { StorefrontService } from '../storefront/storefront.service';
 
 @Injectable()
 export class OpsService {
   private readonly logger = new Logger(OpsService.name);
 
   constructor(
+    @Inject(APP_ENV) private readonly env: AppEnv,
     private readonly sapo: SapoService,
     private readonly sapoApi: SapoApiService,
     private readonly catalogStore: CatalogProductStoreService,
@@ -19,18 +23,19 @@ export class OpsService {
     private readonly qnaStore: QnaStoreService,
     private readonly purchaseStore: PurchaseStoreService,
     private readonly prisma: PrismaService,
+    private readonly storefront: StorefrontService,
   ) {}
 
   async getHealth(storeDomain: string) {
+    const install = await this.prisma.appInstall.findUnique({ where: { storeDomain } }).catch(() => null);
+    const shopId = install?.shopId || '';
     const [reviewStats, qnaStats, catalogAudit, purchaseAudit, webhookStats] = await Promise.all([
-      this.reviewStore.getStatsForShop(storeDomain).catch(() => null),
-      this.qnaStore.getStats(storeDomain, '').catch(() => null),
+      this.reviewStore.getStatsForShop(shopId).catch(() => null),
+      this.qnaStore.getStats(shopId, '').catch(() => null),
       this.catalogStore.getAudit(storeDomain).catch(() => null),
-      this.purchaseStore.getAudit(storeDomain).catch(() => null),
+      this.purchaseStore.getAudit(shopId).catch(() => null),
       this.getWebhookSummary(storeDomain).catch(() => ({ totals: [], latest: [] })),
     ]);
-
-    const install = await this.prisma.appInstall.findUnique({ where: { storeDomain } }).catch(() => null);
 
     return {
       ok: true,
@@ -73,16 +78,15 @@ export class OpsService {
 
   async resyncConfig(storeDomain: string) {
     const accessToken = await this.sapo.resolveAccessToken(storeDomain);
-    // Write storefront config metafield
     const config = { apiUrl: process.env.API_BASE_URL || '', storeDomain };
-    await this.sapoApi.createMetafield(storeDomain, accessToken, {
-      namespace: 'f1genz',
-      key: 'config',
-      value: JSON.stringify(config),
-      value_type: 'string',
-      owner_resource: 'shop',
-    }).catch((e) => this.logger.warn(`Config metafield write failed: ${e.message}`));
-    return { ok: true, storeDomain, config };
+    let configError: string | null = null;
+    try {
+      await this.storefront.writeStorefrontConfig(storeDomain, accessToken);
+    } catch (e) {
+      configError = e instanceof Error ? e.message : 'failed';
+      this.logger.warn(`Config metafield write failed: ${configError}`);
+    }
+    return { ok: true, storeDomain, config, ...(configError ? { configError } : {}) };
   }
 
   async resyncWebhooks(storeDomain: string) {

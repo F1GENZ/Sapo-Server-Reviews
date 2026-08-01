@@ -6,9 +6,11 @@ import { CatalogModule } from '../catalog/catalog.module';
 import { ReviewModule } from '../review/review.module';
 import { QnaModule } from '../qna/qna.module';
 import { PurchaseModule } from '../purchase/purchase.module';
+import { StorefrontModule } from '../storefront/storefront.module';
+import { SapoApiModule } from '../sapo/sapo-api.module';
 
 @Module({
-  imports: [DatabaseModule, CatalogModule, ReviewModule, QnaModule, PurchaseModule],
+  imports: [DatabaseModule, CatalogModule, ReviewModule, QnaModule, PurchaseModule, StorefrontModule, SapoApiModule],
   controllers: [OpsController],
   providers: [OpsService],
 })

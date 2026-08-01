@@ -12,12 +12,17 @@ import {
   Res,
   BadRequestException,
   DefaultValuePipe,
+  Inject,
   ParseIntPipe,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ReviewService } from './review.service';
 import { NumericIdPipe } from '../common/pipes/numeric-id.pipe';
 import { SapoService } from '../sapo/sapo.service';
+import { APP_ENV } from '../config/app-config.module';
+import type { AppEnv } from '../config/env.schema';
+import { IngressRateLimitService } from '../common/security/ingress-rate-limit.service';
+import { clientFingerprint } from '../common/security/client-fingerprint';
 
 const STORE_DOMAIN_RE = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
 
@@ -50,12 +55,24 @@ function setPublicCorsHeaders(req: Request, res: Response): void {
   }
 }
 
-@Controller('public/reviews')
+@Controller('api/public/reviews')
 export class PublicReviewController {
   constructor(
     private readonly reviewService: ReviewService,
     private readonly sapoService: SapoService,
+    @Inject(APP_ENV) private readonly env: AppEnv,
+    private readonly rateLimit: IngressRateLimitService,
   ) {}
+
+  /** Rate-limit public review submissions per store + client. */
+  private async assertPublicRate(req: Request, storeDomain: string): Promise<void> {
+    await this.rateLimit.assertAllowed(
+      'public-review:submit',
+      `${storeDomain}|${clientFingerprint(req)}`,
+      this.env.PUBLIC_WRITE_RATE_LIMIT_WINDOW_SECONDS,
+      this.env.PUBLIC_WRITE_RATE_LIMIT_MAX,
+    );
+  }
 
   /** Extract and validate the store domain from header or query. */
   private extractStoreDomain(header?: string, query?: string): string {
@@ -82,6 +99,43 @@ export class PublicReviewController {
   }
 
   // ── Public endpoints ──────────────────────────────────────────────────
+
+  @Get('config/widget')
+  async getWidgetConfig(
+    @Headers('x-store-domain') storeDomainHeader?: string,
+    @Query('storeDomain') storeDomainQuery?: string,
+  ) {
+    const storeDomain = this.extractStoreDomain(storeDomainHeader, storeDomainQuery);
+    const config = await this.reviewService.getPublicWidgetConfig(storeDomain);
+    return { data: config };
+  }
+
+  @Get('summaries')
+  async getSummaries(
+    @Query('productIds') productIds?: string,
+    @Headers('x-store-domain') storeDomainHeader?: string,
+    @Query('storeDomain') storeDomainQuery?: string,
+  ) {
+    const storeDomain = this.extractStoreDomain(storeDomainHeader, storeDomainQuery);
+    const ids = String(productIds || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const summaries = await this.reviewService.getPublicSummaries(storeDomain, ids);
+    return { data: summaries };
+  }
+
+  @Post(':productId/purchase-eligibility')
+  async checkPurchaseEligibility(
+    @Param('productId', NumericIdPipe) productId: string,
+    @Body() body: { email?: string; phone?: string },
+    @Headers('x-store-domain') storeDomainHeader?: string,
+    @Query('storeDomain') storeDomainQuery?: string,
+  ) {
+    const storeDomain = this.extractStoreDomain(storeDomainHeader, storeDomainQuery);
+    const result = await this.reviewService.checkPurchaseEligibility(storeDomain, productId, {
+      email: body?.email,
+      phone: body?.phone,
+    });
+    return { data: result };
+  }
 
   @Get(':productId')
   async getReviews(
@@ -115,6 +169,7 @@ export class PublicReviewController {
   @Post(':productId')
   async submitReview(
     @Param('productId', NumericIdPipe) productId: string,
+    @Req() req: Request,
     @Body()
     body: {
       rating: number;
@@ -129,6 +184,7 @@ export class PublicReviewController {
     @Query('storeDomain') storeDomainQuery?: string,
   ) {
     const storeDomain = this.extractStoreDomain(storeDomainHeader, storeDomainQuery);
+    await this.assertPublicRate(req, storeDomain);
     const token = await this.sapoService.resolveAccessToken(storeDomain);
 
     // Basic validation

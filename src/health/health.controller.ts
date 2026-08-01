@@ -40,7 +40,7 @@ export class HealthController {
     );
     const webhookDegraded = Boolean(webhookRegistration.degraded || webhookRegistration.failed);
     return {
-      ok: redisOk && dbOk && !webhookDegraded,
+      ok: redisOk && dbOk,
       redis: redisOk ? 'ok' : 'failed',
       db: dbOk ? 'ok' : 'failed',
       webhookRegistration,

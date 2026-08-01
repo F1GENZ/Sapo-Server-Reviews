@@ -6,12 +6,14 @@ import { LifecycleLockService } from './lifecycle-lock.service';
 import { SapoApiService } from './sapo-api.service';
 import { OAuthStateService } from './oauth-state.service';
 import { SessionService } from './session.service';
-import { ShopDomainService } from './shop-domain.service';
+import { ShopDomainService, normalizeShopDomain } from './shop-domain.service';
 import { TokenEncryptionService } from './token-encryption.service';
 import { StorefrontService } from '../storefront/storefront.service';
 import { WebhookRegistrationService } from './webhook-registration.service';
 
 const BLOCKED_STATUSES = new Set(['canceled', 'expired', 'needs_reinstall', 'declined', 'uninstalled']);
+
+const SAPO_SHOP_DOMAIN_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.mysapo\.net$/i;
 
 const asString = (value: unknown): string | null =>
   typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -57,7 +59,11 @@ export class SapoService {
     });
     const baseDomain = input.storeDomain;
     if (!baseDomain) throw new BadRequestException('storeDomain is required to build authorize URL');
-    return `https://${baseDomain}/admin/oauth/authorize?${params.toString()}`;
+    const shopHost = normalizeShopDomain(baseDomain);
+    if (!SAPO_SHOP_DOMAIN_RE.test(shopHost)) {
+      throw new BadRequestException('storeDomain must be a valid Sapo shop domain (*.mysapo.net)');
+    }
+    return `https://${shopHost}/admin/oauth/authorize?${params.toString()}`;
   }
 
   async buildLoginUrl(input: { storeDomain?: string; redirectTo?: string } = {}): Promise<string> {

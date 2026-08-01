@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../database/prisma.service';
 import { ReviewProductStoreService } from '../review/review-product-store.service';
 import { QnaStoreService } from '../qna/qna-store.service';
 
@@ -36,14 +37,20 @@ export class DashboardService {
   constructor(
     private readonly reviewStore: ReviewProductStoreService,
     private readonly qnaStore: QnaStoreService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async getOverview(storeDomain: string): Promise<DashboardOverview> {
+    const install = await this.prisma.appInstall.findUnique({
+      where: { storeDomain },
+      select: { shopId: true },
+    }).catch(() => null);
+    const shopId = install?.shopId || '';
     const [reviewStats, qnaStats, recentReviews, recentQuestions] = await Promise.all([
-      this.reviewStore.getStatsForShop(storeDomain).catch((e: any) => { this.logger.warn(`Review stats failed: ${e.message}`); return null; }),
-      this.qnaStore.getStats(storeDomain, '').catch(() => null),
-      this.reviewStore.getAllReviews(storeDomain, { page: 1, size: 8, sort: 'newest' }).catch(() => ({ items: [], total: 0 })),
-      this.qnaStore.getAllQuestions(storeDomain, { page: 1, size: 8, sort: 'newest' }).catch(() => ({ items: [], total: 0 })),
+      this.reviewStore.getStatsForShop(shopId).catch((e: any) => { this.logger.warn(`Review stats failed: ${e.message}`); return null; }),
+      this.qnaStore.getStats(shopId, '').catch(() => null),
+      this.reviewStore.getAllReviews(shopId, { page: 1, size: 8, sort: 'newest' }).catch(() => ({ items: [], total: 0 })),
+      this.qnaStore.getAllQuestions(shopId, { page: 1, size: 8, sort: 'newest' }).catch(() => ({ items: [], total: 0 })),
     ]);
 
     const totalReviews = reviewStats?.totalReviews ?? 0;
