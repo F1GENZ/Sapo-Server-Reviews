@@ -118,6 +118,7 @@ model SubscriptionSnapshot {
   shop   Shop?   @relation(fields: [shopId], references: [id], onDelete: SetNull)
 
   correlationKey String @unique
+  storeDomain    String?
   domain         String?
   subscriptionId String?
   payloadHash    String
@@ -133,6 +134,7 @@ model SubscriptionSnapshot {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([storeDomain])
   @@index([domain])
   @@index([subscriptionId])
   @@index([payloadHash])
