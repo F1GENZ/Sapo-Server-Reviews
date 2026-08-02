@@ -230,7 +230,7 @@ export class QnaService {
       author: dto.author !== undefined ? dto.author : existing.author,
       email: existing.email,
       phone: existing.phone,
-      answer: existing.answer,
+      answer: dto.answer !== undefined ? dto.answer : existing.answer,
       answeredBy: existing.answeredBy,
       status: existing.status,
       answeredAt: existing.answeredAt ? Number(existing.answeredAt) : null,
@@ -238,6 +238,20 @@ export class QnaService {
     });
 
     return toDomainQuestion(record);
+  }
+
+  // ─── deleteQuestion (admin) ──────────────────────────────────────
+
+  async deleteQuestion(
+    storeDomain: string,
+    productId: string,
+    questionId: string,
+  ): Promise<boolean> {
+    const install = await this.resolveInstall(storeDomain);
+    const shopId = install.shopId;
+    const existing = await this.qnaStore.getQuestion(shopId, productId, questionId);
+    if (!existing) return false;
+    return this.qnaStore.deleteQuestion(shopId, productId, questionId);
   }
 
   // ─── getQuestions (admin single product, paginated) ──────────────

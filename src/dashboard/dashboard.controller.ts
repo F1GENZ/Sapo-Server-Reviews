@@ -13,7 +13,7 @@ export class DashboardController {
   ) {}
 
   @Get('/overview')
-  overview(@Req() req: { storeDomain?: string }) {
-    return this.dashboard.getOverview(req.storeDomain || '');
+  async overview(@Req() req: { storeDomain?: string }) {
+    return { data: await this.dashboard.getOverview(req.storeDomain || '') };
   }
 }

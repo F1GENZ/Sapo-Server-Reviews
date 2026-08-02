@@ -199,10 +199,11 @@ export class SapoApiService {
   // ─── Shop ───────────────────────────────────────────────────────
 
   async getShop(storeDomain: string, accessToken: string): Promise<SapoShop> {
-    const res = await this.fetch(storeDomain, accessToken, false, '/shop.json');
-    const payload = await res.json() as { shop?: SapoShop };
-    if (!payload.shop) throw new BadRequestException('Failed to fetch shop info');
-    return payload.shop;
+    const res = await this.fetch(storeDomain, accessToken, false, '/store.json');
+    const payload = await res.json() as { store?: SapoShop; shop?: SapoShop };
+    const store = payload.store ?? payload.shop;
+    if (!store) throw new BadRequestException('Failed to fetch store info');
+    return store;
   }
 
   // ─── Products ───────────────────────────────────────────────────

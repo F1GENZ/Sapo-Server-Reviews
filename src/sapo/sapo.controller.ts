@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -64,14 +65,41 @@ export class SapoController {
       return undefined;
     }
     this.sessions.setSessionCookie(res, response.storeDomain);
-    res.redirect(302, new URL(response.redirectTo || '/dashboard', this.env.FRONTEND_URL).toString());
+    const target = new URL(response.redirectTo || '/dashboard', this.env.FRONTEND_URL);
+    target.searchParams.set('orgid', response.storeDomain);
+    // One-time, TTL-bounded code — the SPA exchanges it for a session token
+    // via POST /api/auth/session/exchange. Never put the long-lived JWT in the URL.
+    target.searchParams.set('handoff_code', response.handoffCode);
+    res.redirect(302, target.toString());
     return undefined;
   }
 
   @Get('/oauth/install/login')
-  async startLogin(@Req() req: Request, @Query('storeDomain') storeDomain?: string, @Query('redirect') redirectTo?: string) {
+  async startLogin(
+    @Req() req: Request,
+    @Query('storeDomain') storeDomain?: string,
+    @Query('orgid') orgid?: string,
+    @Query('shop') shop?: string,
+    @Query('redirect') redirectTo?: string,
+  ) {
     await this.assertAuthRate(req, 'oauth-login');
-    return this.sapo.startLogin({ storeDomain, redirectTo });
+    const resolvedStore = storeDomain || orgid || shop || undefined;
+    const result = await this.sapo.startLogin({ storeDomain: resolvedStore, redirectTo });
+    return wantsBrowserRedirect(req) ? result : result.url;
+  }
+
+  @Get('/oauth/install/login/entry')
+  async loginEntry(
+    @Req() req: Request,
+    @Query('storeDomain') storeDomain?: string,
+    @Query('orgid') orgid?: string,
+    @Query('shop') shop?: string,
+    @Query('redirect') redirectTo?: string,
+  ) {
+    await this.assertAuthRate(req, 'oauth-login');
+    const resolvedStore = storeDomain || orgid || shop || undefined;
+    const result = await this.sapo.startLogin({ storeDomain: resolvedStore, redirectTo });
+    return { url: result.url, reason: result.reason };
   }
 
   @Get('/oauth/install/login/verify-hmac')
@@ -114,14 +142,28 @@ export class SapoController {
     return this.finishAuthFlow(req, res, response);
   }
 
+  @Get('/oauth/install/start')
+  async installStart(@Query('storeDomain') storeDomain?: string) {
+    if (!storeDomain) throw new BadRequestException('storeDomain is required');
+    return this.sapo.buildInstallUrl({ storeDomain });
+  }
+
   @Get('/oauth/install/callback')
   async installCallbackGet(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
     @Query('code') code?: string,
     @Query('state') state?: string,
+    @Query('store') store?: string,
   ) {
     await this.assertAuthRate(req, 'oauth-install');
+    if (!code) {
+      if (store) {
+        const login = await this.sapo.buildLoginUrl({ storeDomain: store });
+        return res.redirect(302, login);
+      }
+      return res.redirect(302, this.env.FRONTEND_URL || '/');
+    }
     const response = await this.sapo.processInstallCallback(code || '', state);
     return this.finishAuthFlow(req, res, response);
   }
@@ -170,7 +212,12 @@ export class SapoController {
     }
     const handoff = await this.sessions.consumeHandoff(handoffCode);
     this.sessions.setSessionCookie(res, handoff.storeDomain);
-    res.json({ ok: true, storeDomain: handoff.storeDomain, redirectTo: handoff.redirectTo });
+    res.json({
+      ok: true,
+      storeDomain: handoff.storeDomain,
+      redirectTo: handoff.redirectTo,
+      sessionToken: this.sessions.createSessionToken(handoff.storeDomain),
+    });
   }
 
   @Post('/auth/logout')
@@ -192,7 +239,7 @@ export class SapoController {
 
   @Get('/app/session')
   @UseGuards(ShopAuthGuard)
-  sessionProbe(@Req() req: Request & { storeDomain?: string }) {
-    return this.sapo.getSessionProbe(req.storeDomain || '');
+  async sessionProbe(@Req() req: Request & { storeDomain?: string }) {
+    return { data: await this.sapo.getSessionProbe(req.storeDomain || '') };
   }
 }

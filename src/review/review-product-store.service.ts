@@ -199,6 +199,13 @@ export class ReviewProductStoreService {
     });
   }
 
+  async deleteReview(shopId: string, productId: string, reviewId: string): Promise<boolean> {
+    const result = await this.prisma.reviewProduct.deleteMany({
+      where: { shopId, productId, reviewId },
+    });
+    return result.count > 0;
+  }
+
   // -- List for a product (paginated) ----------------------------------------
 
   async getReviews(

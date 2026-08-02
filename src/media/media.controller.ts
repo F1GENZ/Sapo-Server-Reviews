@@ -8,18 +8,19 @@ export class MediaController {
   constructor(private readonly media: MediaService) {}
 
   @Post('/upload-ticket')
-  createTicket(@Req() req: { storeDomain?: string }, @Body() body: {
+  async createTicket(@Req() req: { storeDomain?: string }, @Body() body: {
     productId: string;
     filename: string;
     contentType: string;
     fileSize: number;
   }) {
-    return this.media.createUploadTicket({
+    const ticket = await this.media.createUploadTicket({
       storeDomain: req.storeDomain || '',
       productId: body.productId,
       filename: body.filename,
       contentType: body.contentType,
       fileSize: body.fileSize,
     });
+    return { data: ticket };
   }
 }

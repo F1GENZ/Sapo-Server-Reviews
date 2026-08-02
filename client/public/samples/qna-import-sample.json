@@ -1,0 +1,66 @@
+[
+  {
+    "id": "demo-question-001",
+    "reviewContent": "Sản phẩm demo này có bảo hành không?",
+    "reviewStatus": "APPROVED",
+    "reviewType": "QUESTION",
+    "shopId": 9000000000,
+    "productId": 9000001001,
+    "productTitle": null,
+    "productHandle": "may-pha-ca-phe-demo-x1",
+    "productName": "Máy pha cà phê Demo X1",
+    "productImage": "https://placehold.co/900x900/png?text=Demo+Product+1",
+    "participantId": "demo-customer-101",
+    "participantName": "Minh Demo",
+    "participant": {
+      "id": "demo-customer-101",
+      "name": "Minh Demo",
+      "email": "minh.demo@example.com",
+      "phone": "0900000101",
+      "shopId": 9000000000
+    },
+    "reviewImages": [],
+    "reviewAnswers": [
+      {
+        "id": "demo-answer-101",
+        "name": "DEMO SHOP",
+        "answer": "Dạ sản phẩm demo có bảo hành theo chính sách mẫu của shop.",
+        "reviewStatus": "APPROVED",
+        "reviewProductId": "demo-question-001",
+        "createdBy": "demo-admin",
+        "createdDate": "2026-05-17T09:30:00+07:00",
+        "lastModifiedBy": null,
+        "lastModifiedDate": "2026-05-17T09:30:00+07:00"
+      }
+    ],
+    "domain": null,
+    "createdBy": "demo-admin",
+    "createdDate": "2026-05-17T08:00:00+07:00",
+    "lastModifiedBy": null,
+    "lastModifiedDate": "2026-05-17T09:30:00+07:00"
+  },
+  {
+    "id": "demo-question-002",
+    "reviewContent": "Mẫu demo này còn hàng không?",
+    "reviewStatus": "PENDING",
+    "reviewType": "QUESTION",
+    "shopId": 9000000000,
+    "productId": 9000001002,
+    "productHandle": "balo-du-lich-demo-lite",
+    "productName": "Balo du lịch Demo Lite",
+    "productImage": "https://placehold.co/900x900/png?text=Demo+Product+2",
+    "participantName": "Lan Demo",
+    "participant": {
+      "name": "Lan Demo",
+      "email": "lan.demo@example.com",
+      "phone": "0900000102"
+    },
+    "reviewImages": [],
+    "reviewAnswers": [],
+    "domain": null,
+    "createdBy": "demo-admin",
+    "createdDate": "2026-05-16T11:20:00+07:00",
+    "lastModifiedBy": null,
+    "lastModifiedDate": "2026-05-16T11:20:00+07:00"
+  }
+]

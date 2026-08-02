@@ -3,6 +3,7 @@ import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env.schema';
 import { SapoService } from '../sapo/sapo.service';
 import { SapoApiService } from '../sapo/sapo-api.service';
+import { CatalogSyncService } from '../catalog/catalog-sync.service';
 import { CatalogProductStoreService } from '../catalog/catalog-product-store.service';
 import { ReviewProductStoreService } from '../review/review-product-store.service';
 import { QnaStoreService } from '../qna/qna-store.service';
@@ -18,6 +19,7 @@ export class OpsService {
     @Inject(APP_ENV) private readonly env: AppEnv,
     private readonly sapo: SapoService,
     private readonly sapoApi: SapoApiService,
+    private readonly catalogSync: CatalogSyncService,
     private readonly catalogStore: CatalogProductStoreService,
     private readonly reviewStore: ReviewProductStoreService,
     private readonly qnaStore: QnaStoreService,
@@ -32,7 +34,7 @@ export class OpsService {
     const [reviewStats, qnaStats, catalogAudit, purchaseAudit, webhookStats] = await Promise.all([
       this.reviewStore.getStatsForShop(shopId).catch(() => null),
       this.qnaStore.getStats(shopId, '').catch(() => null),
-      this.catalogStore.getAudit(storeDomain).catch(() => null),
+      this.catalogStore.getAudit(shopId).catch(() => null),
       this.purchaseStore.getAudit(shopId).catch(() => null),
       this.getWebhookSummary(storeDomain).catch(() => ({ totals: [], latest: [] })),
     ]);
@@ -107,14 +109,7 @@ export class OpsService {
 
   async backfillCatalog(storeDomain: string) {
     const accessToken = await this.sapo.resolveAccessToken(storeDomain);
-    let synced = 0;
-    for (let page = 1; page <= 50; page++) {
-      const products = await this.sapoApi.getProducts(storeDomain, accessToken, { page, limit: 250 });
-      if (!products.length) break;
-      const rows = products.map(p => this.catalogStore.normalizeSapoProduct(storeDomain, p as any, 'sapo'));
-      await this.catalogStore.upsertProducts(rows.filter(Boolean) as any[]);
-      synced += rows.length;
-    }
-    return { ok: true, storeDomain, synced };
+    const result = await this.catalogSync.backfillStore(storeDomain, accessToken);
+    return { ok: true, storeDomain, ...result };
   }
 }

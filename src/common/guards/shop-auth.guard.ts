@@ -38,6 +38,13 @@ export class ShopAuthGuard implements CanActivate {
     private readonly reflector: Reflector,
   ) {}
 
+  private extractBearerToken(authorization: unknown): string | null {
+    const raw = toStringValue(authorization);
+    if (!raw || !raw.startsWith('Bearer ')) return null;
+    const token = raw.slice(7).trim();
+    return token || null;
+  }
+
   private getRequestedStoreDomain(req: ShopRequest): string | null {
     return (
       toStringValue(req.headers['x-store-domain']) ||
@@ -62,7 +69,8 @@ export class ShopAuthGuard implements CanActivate {
       throw new BadRequestException('Invalid storeDomain');
     }
 
-    const sessionToken = this.sessionService.getSessionTokenFromRequest(req);
+    const sessionToken =
+      this.sessionService.getSessionTokenFromRequest(req) || this.extractBearerToken(req.headers.authorization);
     if (!sessionToken) throw new UnauthorizedException('Missing auth session');
 
     const session = this.sessionService.verifySessionToken(sessionToken);

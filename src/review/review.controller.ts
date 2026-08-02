@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -232,5 +233,27 @@ export class ReviewController {
     );
     if (!review) throw new NotFoundException('Review not found');
     return { data: review };
+  }
+
+  @Delete(':productId/:reviewId')
+  async deleteReview(
+    @Param('productId', NumericIdPipe) productId: string,
+    @Param('reviewId') reviewId: string,
+    @Req() req: AuthRequest,
+  ) {
+    requireAuth(req);
+    const result = await this.reviewService.deleteReview(
+      req.token,
+      req.storeDomain,
+      productId,
+      reviewId,
+    );
+    if (!result.deleted) throw new NotFoundException('Review not found');
+    return {
+      data: {
+        deleted: true,
+        ...(result.summarySyncFailed ? { summarySyncFailed: true } : {}),
+      },
+    };
   }
 }

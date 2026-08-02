@@ -175,6 +175,13 @@ export class QnaStoreService {
     });
   }
 
+  async deleteQuestion(shopId: string, productId: string, questionId: string): Promise<boolean> {
+    const result = await this.prisma.qnaQuestion.deleteMany({
+      where: { shopId, productId, questionId },
+    });
+    return result.count > 0;
+  }
+
   // -- List for a product (paginated) ----------------------------------------
 
   async getQuestions(

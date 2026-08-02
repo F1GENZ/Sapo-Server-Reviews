@@ -14,4 +14,9 @@ export class UpdateQuestionDto {
   @IsOptional()
   @MaxLength(100)
   author?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(2000)
+  answer?: string;
 }

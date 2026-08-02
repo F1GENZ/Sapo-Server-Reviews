@@ -8,22 +8,22 @@ export class OpsController {
   constructor(private readonly ops: OpsService) {}
 
   @Get('/health')
-  health(@Req() req: { storeDomain?: string }) {
-    return this.ops.getHealth(req.storeDomain || '');
+  async health(@Req() req: { storeDomain?: string }) {
+    return { data: await this.ops.getHealth(req.storeDomain || '') };
   }
 
   @Post('/resync-config')
-  resyncConfig(@Req() req: { storeDomain?: string }) {
-    return this.ops.resyncConfig(req.storeDomain || '');
+  async resyncConfig(@Req() req: { storeDomain?: string }) {
+    return { data: await this.ops.resyncConfig(req.storeDomain || '') };
   }
 
   @Post('/resync-webhooks')
-  resyncWebhooks(@Req() req: { storeDomain?: string }) {
-    return this.ops.resyncWebhooks(req.storeDomain || '');
+  async resyncWebhooks(@Req() req: { storeDomain?: string }) {
+    return { data: await this.ops.resyncWebhooks(req.storeDomain || '') };
   }
 
   @Post('/backfill-catalog')
-  backfillCatalog(@Req() req: { storeDomain?: string }) {
-    return this.ops.backfillCatalog(req.storeDomain || '');
+  async backfillCatalog(@Req() req: { storeDomain?: string }) {
+    return { data: await this.ops.backfillCatalog(req.storeDomain || '') };
   }
 }

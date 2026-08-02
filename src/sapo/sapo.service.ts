@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env.schema';
 import { PrismaService } from '../database/prisma.service';
@@ -30,6 +30,7 @@ export type HandoffResponse = { handoffCode: string; storeDomain: string; redire
 @Injectable()
 export class SapoService {
   private readonly db: any;
+  private readonly logger = new Logger(SapoService.name);
 
   constructor(
     @Inject(APP_ENV) private readonly env: AppEnv,
@@ -95,7 +96,11 @@ export class SapoService {
     if (!tokenPayload.access_token) throw new BadRequestException('Invalid OAuth token payload');
 
     // Verify the store matches by calling shop API
-    const shop = await this.sapoApi.getShop(storeDomain, tokenPayload.access_token).catch(() => null);
+    const shop = await this.sapoApi.getShop(storeDomain, tokenPayload.access_token)
+      .catch((err: unknown) => {
+        this.logger.error(`[install] getShop failed for ${storeDomain}: ${(err as Error)?.message}`);
+        return null;
+      });
     if (!shop) throw new BadRequestException('Failed to verify store identity');
 
     const install = await this.db.appInstall.findUnique({ where: { storeDomain } });
@@ -118,17 +123,23 @@ export class SapoService {
     if (!tokenPayload.access_token) throw new BadRequestException('Invalid OAuth token payload');
 
     // Verify store identity
-    const shop = await this.sapoApi.getShop(storeDomain, tokenPayload.access_token).catch(() => null);
+    const shop = await this.sapoApi.getShop(storeDomain, tokenPayload.access_token).catch((err: unknown) => {
+      this.logger.error(`[install] getShop failed for ${storeDomain}: ${(err as Error)?.message}`);
+      return null;
+    });
     if (!shop) throw new BadRequestException('Failed to verify store identity');
     const domains = this.shopDomains.collectDomains(shop as any);
+    this.logger.log(`[install] getShop ok domains=${JSON.stringify(domains)}`);
 
     const lock = await this.lifecycleLocks.acquireLifecycleLock(storeDomain);
     if (!lock) throw new ConflictException('Lifecycle operation already in progress');
+    this.logger.log(`[install] lifecycle lock acquired for ${storeDomain}`);
 
     try {
       const existingInstall = typeof this.db.appInstall.findUnique === 'function'
         ? await this.db.appInstall.findUnique({ where: { storeDomain } })
         : null;
+      this.logger.log(`[install] existing install=${existingInstall?.status ?? 'none'}`);
       const uninstalledAt = timestampOf(existingInstall?.uninstalledAt);
       if (uninstalledAt && oauthState.createdAt < uninstalledAt) {
         throw new BadRequestException('Stale install callback after uninstall');
@@ -142,6 +153,7 @@ export class SapoService {
         create: { storeDomain },
         update: {},
       });
+      this.logger.log(`[install] shop upserted id=${shopRow.id}`);
 
       await this.db.appInstall.upsert({
         where: { storeDomain },
@@ -168,6 +180,7 @@ export class SapoService {
           tokenVersion: { increment: 1 },
         },
       });
+      this.logger.log(`[install] appInstall upserted for ${storeDomain}`);
 
       for (const domain of domains) {
         const tombstonePriorOwner = this.db.shopDomain.updateMany({
@@ -195,6 +208,7 @@ export class SapoService {
       this.storefrontService.writeStorefrontConfig(storeDomain, accessToken)
         .catch(() => { /* non-critical */ });
 
+      this.logger.log(`[install] creating handoff for ${storeDomain}`);
       return this.sessionService.createHandoff(storeDomain, oauthState.redirectTo);
     } finally {
       await this.lifecycleLocks.release(lock);

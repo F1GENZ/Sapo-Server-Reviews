@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SapoApiService } from '../sapo/sapo-api.service';
+import type { SapoProduct } from '../sapo/sapo.types';
 import { CatalogProductStoreService } from './catalog-product-store.service';
+import { PrismaService } from '../database/prisma.service';
 
 const MAX_PAGES = 50;
 const PAGE_LIMIT = 250;
@@ -12,7 +14,19 @@ export class CatalogSyncService {
   constructor(
     private readonly sapoApi: SapoApiService,
     private readonly catalogStore: CatalogProductStoreService,
+    private readonly prisma: PrismaService,
   ) {}
+
+  private async resolveShopId(storeDomain: string): Promise<string> {
+    const install = await this.prisma.appInstall.findUnique({
+      where: { storeDomain },
+      select: { shopId: true },
+    }).catch(() => null);
+    if (!install?.shopId) {
+      this.logger.warn(`No install found for ${storeDomain} while syncing catalog`);
+    }
+    return install?.shopId || '';
+  }
 
   async backfillStore(
     storeDomain: string,
@@ -20,11 +34,16 @@ export class CatalogSyncService {
   ): Promise<{
     synced: number;
     pages: number;
+    failedPages: number;
     totalFromCount: number | null;
-    stopReason: 'completed' | 'max_pages' | 'empty_page';
+    stopReason: 'completed' | 'max_pages' | 'empty_page' | 'failed_page';
   }> {
     let synced = 0;
     let pages = 0;
+    let failedPages = 0;
+
+    const shopId = await this.resolveShopId(storeDomain);
+    if (!shopId) return { synced: 0, pages: 0, failedPages: 0, totalFromCount: null, stopReason: 'empty_page' };
 
     const totalCount = await this.sapoApi
       .getProductsCount(storeDomain, accessToken)
@@ -41,20 +60,33 @@ export class CatalogSyncService {
       return {
         synced: 0,
         pages: 0,
+        failedPages: 0,
         totalFromCount: 0,
         stopReason: 'completed',
       };
     }
 
-    let stopReason: 'completed' | 'max_pages' | 'empty_page' = 'max_pages';
+    let stopReason: 'completed' | 'max_pages' | 'empty_page' | 'failed_page' = 'max_pages';
     const seenProductIds = new Set<string>();
 
     for (let page = 1; page <= MAX_PAGES; page++) {
-      const products = await this.sapoApi.getProducts(
-        storeDomain,
-        accessToken,
-        { page, limit: PAGE_LIMIT },
-      );
+      let products: SapoProduct[];
+      try {
+        products = await this.sapoApi.getProducts(
+          storeDomain,
+          accessToken,
+          { page, limit: PAGE_LIMIT },
+        );
+      } catch (error) {
+        failedPages += 1;
+        stopReason = 'failed_page';
+        this.logger.warn(
+          `Backfill page ${page} failed for ${storeDomain}: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          } — stopping with partial result`,
+        );
+        break;
+      }
 
       if (!products.length) {
         stopReason = 'empty_page';
@@ -67,7 +99,7 @@ export class CatalogSyncService {
       const normalized = products
         .map((product) =>
           this.catalogStore.normalizeSapoProduct(
-            storeDomain,
+            shopId,
             product as unknown as Record<string, unknown>,
             'sapo',
           ),
@@ -106,7 +138,7 @@ export class CatalogSyncService {
       const staleDeleted =
         await this.catalogStore
           .markMissingSapoProductsDeleted(
-            storeDomain,
+            shopId,
             Array.from(seenProductIds),
           )
           .catch((error) => {
@@ -131,6 +163,7 @@ export class CatalogSyncService {
     return {
       synced,
       pages,
+      failedPages,
       totalFromCount: totalCount,
       stopReason,
     };
@@ -143,10 +176,13 @@ export class CatalogSyncService {
   ): Promise<void> {
     // Webhook topics: products/create, products/update, products/delete
     if (action === 'delete' || action === 'products/delete') {
-      await this.catalogStore.softDeleteProduct(storeDomain, productId);
-      this.logger.log(
-        `Soft-deleted catalog product ${productId} for ${storeDomain} via webhook`,
-      );
+      const shopId = await this.resolveShopId(storeDomain);
+      if (shopId) {
+        await this.catalogStore.softDeleteProduct(shopId, productId);
+        this.logger.log(
+          `Soft-deleted catalog product ${productId} for ${storeDomain} via webhook`,
+        );
+      }
       return;
     }
 
@@ -172,10 +208,19 @@ export class CatalogSyncService {
     accessToken: string,
   ): Promise<void> {
     if (action === 'delete' || action === 'products/delete') {
-      await this.catalogStore.softDeleteProduct(storeDomain, productId);
-      this.logger.log(
-        `Soft-deleted catalog product ${productId} for ${storeDomain} via webhook`,
-      );
+      const shopId = await this.resolveShopId(storeDomain);
+      if (shopId) {
+        await this.catalogStore.softDeleteProduct(shopId, productId);
+        this.logger.log(
+          `Soft-deleted catalog product ${productId} for ${storeDomain} via webhook`,
+        );
+      }
+      return;
+    }
+
+    const shopId = await this.resolveShopId(storeDomain);
+    if (!shopId) {
+      this.logger.warn(`Catalog webhook skipped: no install for ${storeDomain}`);
       return;
     }
 
@@ -186,7 +231,7 @@ export class CatalogSyncService {
         productId,
       );
       const normalized = this.catalogStore.normalizeSapoProduct(
-        storeDomain,
+        shopId,
         product as unknown as Record<string, unknown>,
         'webhook',
       );
@@ -202,7 +247,7 @@ export class CatalogSyncService {
         error.message.includes('404')
       ) {
         // Product was likely deleted between webhook delivery and fetch.
-        await this.catalogStore.softDeleteProduct(storeDomain, productId);
+        await this.catalogStore.softDeleteProduct(shopId, productId);
         this.logger.log(
           `Product ${productId} not found (404) for ${storeDomain}, soft-deleted`,
         );

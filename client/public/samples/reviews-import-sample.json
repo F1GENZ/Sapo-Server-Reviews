@@ -1,0 +1,93 @@
+[
+  {
+    "id": "demo-review-001",
+    "numberStar": 5,
+    "reviewTitle": "Sản phẩm demo rất đáng tiền",
+    "reviewContent": "Đây là đánh giá mẫu dùng để kiểm tra import JSON, không thuộc bất kỳ shop thật nào.",
+    "reviewVideo": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+    "reviewStatus": "APPROVED",
+    "reviewType": "REVIEW",
+    "shopId": 9000000000,
+    "productId": 9000001001,
+    "productTitle": null,
+    "productHandle": "may-pha-ca-phe-demo-x1",
+    "productName": "Máy pha cà phê Demo X1",
+    "productImage": "https://placehold.co/900x900/png?text=Demo+Product+1",
+    "participantId": "demo-customer-001",
+    "participantName": "Nguyễn Demo",
+    "participant": {
+      "id": "demo-customer-001",
+      "name": "Nguyễn Demo",
+      "email": "nguyen.demo@example.com",
+      "phone": "0900000001",
+      "shopId": 9000000000
+    },
+    "reviewImages": [
+      {
+        "id": "demo-image-001",
+        "pathImage": "https://placehold.co/900x900/png?text=Demo+Review+1",
+        "reviewProductId": "demo-review-001"
+      }
+    ],
+    "reviewAnswers": [
+      {
+        "id": "demo-answer-001",
+        "name": "DEMO SHOP",
+        "answer": "Cảm ơn bạn đã gửi đánh giá demo.",
+        "reviewStatus": "APPROVED",
+        "reviewProductId": "demo-review-001",
+        "createdBy": "demo-admin",
+        "createdDate": "2026-05-17T09:30:00+07:00",
+        "lastModifiedBy": null,
+        "lastModifiedDate": "2026-05-17T09:30:00+07:00"
+      }
+    ],
+    "domain": null,
+    "createdBy": "demo-admin",
+    "createdDate": "2026-05-17T08:00:00+07:00",
+    "lastModifiedBy": null,
+    "lastModifiedDate": "2026-05-17T09:30:00+07:00"
+  },
+  {
+    "id": "demo-review-002",
+    "numberStar": 4,
+    "reviewTitle": "Import JSON có đủ thông tin sản phẩm",
+    "reviewContent": "Dòng này kiểm tra productName, productHandle, productImage, media và thông tin người đánh giá.",
+    "reviewVideo": "",
+    "reviewStatus": "PENDING",
+    "reviewType": "REVIEW",
+    "shopId": 9000000000,
+    "productId": 9000001002,
+    "productTitle": null,
+    "productHandle": "balo-du-lich-demo-lite",
+    "productName": "Balo du lịch Demo Lite",
+    "productImage": "https://placehold.co/900x900/png?text=Demo+Product+2",
+    "participantId": "demo-customer-002",
+    "participantName": "Trần Demo",
+    "participant": {
+      "id": "demo-customer-002",
+      "name": "Trần Demo",
+      "email": "tran.demo@example.com",
+      "phone": "0900000002",
+      "shopId": 9000000000
+    },
+    "reviewImages": [
+      {
+        "id": "demo-image-002",
+        "pathImage": "https://placehold.co/900x900/png?text=Demo+Review+2",
+        "reviewProductId": "demo-review-002"
+      },
+      {
+        "id": "demo-image-003",
+        "pathImage": "https://placehold.co/900x900/png?text=Demo+Review+3",
+        "reviewProductId": "demo-review-002"
+      }
+    ],
+    "reviewAnswers": [],
+    "domain": null,
+    "createdBy": "demo-admin",
+    "createdDate": "2026-05-16T11:20:00+07:00",
+    "lastModifiedBy": null,
+    "lastModifiedDate": "2026-05-16T11:20:00+07:00"
+  }
+]

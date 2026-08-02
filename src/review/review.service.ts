@@ -315,13 +315,13 @@ export class ReviewService {
     storeDomain: string,
     accessToken: string,
     productId: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       const install = await this.prisma.appInstall.findUnique({
         where: { storeDomain },
         select: { shopId: true },
       });
-      if (!install) return;
+      if (!install) return false;
 
       const summary = await this.reviewStore.calculatePublicSummary(install.shopId, productId);
       const jsonValue = JSON.stringify({
@@ -357,10 +357,12 @@ export class ReviewService {
           value_type: 'string',
         });
       }
+      return true;
     } catch (err) {
       this.logger.warn(
         `syncPublicSummary failed for product ${productId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
       );
+      return false;
     }
   }
 
@@ -608,6 +610,30 @@ export class ReviewService {
       });
 
       return toDomainReview({ ...existing, pinned: newPinned });
+    } finally {
+      await this.releaseLock(shopId, productId, lockToken);
+    }
+  }
+
+  // ─── deleteReview (admin) ─────────────────────────────────────────
+
+  async deleteReview(
+    token: string,
+    storeDomain: string,
+    productId: string,
+    reviewId: string,
+  ): Promise<{ deleted: boolean; summarySyncFailed?: boolean }> {
+    const install = await this.resolveInstall(storeDomain);
+    const shopId = install.shopId;
+
+    const lockToken = await this.acquireLock(shopId, productId);
+    try {
+      const existing = await this.reviewStore.getReview(shopId, productId, reviewId);
+      if (!existing) return { deleted: false };
+      const deleted = await this.reviewStore.deleteReview(shopId, productId, reviewId);
+      if (!deleted) return { deleted: false };
+      const summaryOk = await this.syncPublicSummary(storeDomain, token, productId);
+      return { deleted: true, ...(summaryOk ? {} : { summarySyncFailed: true }) };
     } finally {
       await this.releaseLock(shopId, productId, lockToken);
     }

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -154,5 +155,21 @@ export class QnaController {
     );
     if (!question) throw new NotFoundException('Question not found');
     return { data: question };
+  }
+
+  @Delete(':productId/:questionId')
+  async deleteQuestion(
+    @Param('productId', NumericIdPipe) productId: string,
+    @Param('questionId') questionId: string,
+    @Req() req: AuthRequest,
+  ) {
+    requireAuth(req);
+    const deleted = await this.qnaService.deleteQuestion(
+      req.storeDomain,
+      productId,
+      questionId,
+    );
+    if (!deleted) throw new NotFoundException('Question not found');
+    return { data: { deleted: true } };
   }
 }
