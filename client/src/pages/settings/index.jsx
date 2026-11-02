@@ -280,6 +280,7 @@ const getPreviewEmailMode = (config) => {
 /* ── Color field component ── */
 const ColorField = ({ label, value, onChange }) => {
   const inputId = useId();
+  const [pickerOpen, setPickerOpen] = useState(false);
   return (
     <div>
       <label htmlFor={inputId} className="f1g-field-label">{label}</label>
@@ -292,12 +293,26 @@ const ColorField = ({ label, value, onChange }) => {
           style={{ flex: 1 }}
           size="small"
         />
-        <ColorPicker
-          value={normalizeColorValue(value, "#000000")}
-          onChange={(color) => onChange(color.toHexString().toLowerCase())}
-          size="small"
+        <span
+          className="f1g-color-trigger"
+          role="button"
+          tabIndex={0}
           aria-label={`Chọn ${label.toLowerCase()}`}
-        />
+          aria-expanded={pickerOpen}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            setPickerOpen((current) => !current);
+          }}
+        >
+          <ColorPicker
+            value={normalizeColorValue(value, "#000000")}
+            onChange={(color) => onChange(color.toHexString().toLowerCase())}
+            size="small"
+            open={pickerOpen}
+            onOpenChange={setPickerOpen}
+          />
+        </span>
       </Flex>
     </div>
   );

@@ -1013,6 +1013,37 @@ async function main() {
       assert.equal(await page.locator(".f1g-tab-dot").count(), 0, "dots clear after a successful save");
     });
 
+    await scenario("S12", "every colour control takes keyboard focus, opens its panel on Enter and closes on Escape", async ({ page }) => {
+      await go(page, withStore("/settings"));
+      const tabs = page.locator(".ant-tabs-nav [role=tab]");
+      await expectVisible(tabs, "settings tabs");
+      const total = await tabs.count();
+      const perTab = [];
+      for (let index = 0; index < total; index += 1) {
+        await tabs.nth(index).focus();
+        await page.keyboard.press("Enter");
+        await page.waitForFunction((i) => document.querySelectorAll(".ant-tabs-nav [role=tab]")[i].getAttribute("aria-selected") === "true", index, { timeout: 5000 });
+        const count = await page.locator(".ant-tabs-tabpane-active [role=button][aria-label^='Chọn ']").count();
+        if (count) perTab.push({ index, count });
+      }
+      assert.ok(perTab.length > 0, "no colour control exposes a keyboard-focusable button");
+      const triggerCount = perTab.reduce((sum, item) => sum + item.count, 0);
+      assert.ok(triggerCount >= 10, `expected the ten-plus colour controls, found ${triggerCount}`);
+      const first = perTab[0];
+      await tabs.nth(first.index).focus();
+      await page.keyboard.press("Enter");
+      await page.waitForFunction((i) => document.querySelectorAll(".ant-tabs-nav [role=tab]")[i].getAttribute("aria-selected") === "true", first.index, { timeout: 5000 });
+      const trigger = page.locator(".ant-tabs-tabpane-active [role=button][aria-label^='Chọn ']").first();
+      await trigger.focus();
+      assert.equal(await trigger.evaluate((node) => document.activeElement === node), true, "the colour control does not take focus");
+      assert.equal(await trigger.getAttribute("aria-expanded"), "false", "the colour panel starts open");
+      await page.keyboard.press("Enter");
+      await expectVisible(page.locator(".ant-color-picker-panel").first(), "colour panel after Enter");
+      await waitUntil(async () => (await trigger.getAttribute("aria-expanded")) === "true", { timeout: 5000 });
+      await page.keyboard.press("Escape");
+      await waitUntil(async () => (await trigger.getAttribute("aria-expanded")) === "false", { timeout: 5000 });
+    });
+
     await scenario("S9", "helper text in every settings tab, inline code included, is at least 12 px", async ({ page }) => {
       await go(page, withStore("/settings"));
       const tabs = page.locator(".ant-tabs-nav [role=tab]");

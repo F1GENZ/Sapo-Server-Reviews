@@ -335,6 +335,11 @@ a:hover {
   outline-offset: 2px;
 }
 
+.f1g-admin-layout .f1g-color-trigger {
+  display: inline-flex;
+  border-radius: 6px;
+}
+
 .f1g-admin-layout .ant-input:focus,
 .f1g-admin-layout .ant-input-focused,
 .f1g-admin-layout .ant-input-affix-wrapper-focused,
