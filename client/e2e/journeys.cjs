@@ -995,6 +995,32 @@ async function main() {
       assert.equal(await page.locator(".f1g-tab-dot").count(), 0, "dots clear after a successful save");
     });
 
+    await scenario("S9", "helper text in every settings tab, inline code included, is at least 12 px", async ({ page }) => {
+      await go(page, withStore("/settings"));
+      const tabs = page.locator(".ant-tabs-nav [role=tab]");
+      await expectVisible(tabs, "settings tabs");
+      const total = await tabs.count();
+      assert.ok(total >= 6, `expected six settings tabs, found ${total}`);
+      let codeCount = 0;
+      const small = [];
+      for (let index = 0; index < total; index += 1) {
+        await tabs.nth(index).focus();
+        await page.keyboard.press("Enter");
+        await page.waitForFunction((i) => document.querySelectorAll(".ant-tabs-nav [role=tab]")[i].getAttribute("aria-selected") === "true", index, { timeout: 5000 });
+        const found = await page.evaluate(() => {
+          const pane = document.querySelector(".ant-tabs-tabpane-active");
+          if (!pane) return [];
+          return [...pane.querySelectorAll("*")]
+            .filter((el) => el instanceof HTMLElement && el.offsetParent !== null && [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim()))
+            .map((el) => ({ tag: el.tagName.toLowerCase(), text: el.textContent.trim().slice(0, 48), size: parseFloat(getComputedStyle(el).fontSize) }));
+        });
+        codeCount += found.filter((item) => item.tag === "code").length;
+        small.push(...found.filter((item) => item.size < 12).map((item) => `${item.tag} ${item.size}px "${item.text}"`));
+      }
+      assert.ok(codeCount >= 2, `the inline <code> hints were not found (${codeCount})`);
+      assert.deepEqual(small, [], `text under 12 px in the settings tabs: ${small.join(" | ")}`);
+    });
+
     console.log("\n--- authentication ---");
     await scenario("A1", "no session: a deep link goes to the login form and remembers the target", { auth: false }, async ({ page }) => {
       await go(page, withStore("/reviews", OTHER_STORE));

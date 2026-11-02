@@ -307,6 +307,10 @@ a:hover {
   color: #475569;
 }
 
+.f1g-admin-layout .ant-typography code {
+  font-size: 12px;
+}
+
 .f1g-admin-layout .ant-btn {
   display: inline-flex;
   align-items: center;
