@@ -610,7 +610,7 @@ const QnaPage = () => {
         }}
         items={tabItems}
         tabBarGutter={12}
-        more={{ icon: <span aria-hidden="true">…</span> }}
+        more={{ icon: <span role="img" aria-label="Xem thêm">…</span> }}
       />
 
       <BulkActionBar

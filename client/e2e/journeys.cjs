@@ -573,6 +573,18 @@ async function main() {
       },
     );
 
+    await scenario("N8", "an empty store gets the three-step checklist with working links and a neutral status tag", async ({ page, state }) => {
+      state.reviews = [];
+      state.questions = [];
+      await go(page, withStore("/"));
+      await expectText(page, "Bắt đầu trong 3 bước", "empty dashboard checklist");
+      for (const [name, route] of [[/Mở hướng dẫn kỹ thuật/, "/dev"], [/Mở cấu hình/, "/settings"], [/Mở quản lý đánh giá/, "/reviews"]]) {
+        const href = await page.getByRole("link", { name }).first().getAttribute("href");
+        assert.equal(new URL(href, BASE_URL).pathname, route, `checklist link ${name} goes to ${href}`);
+      }
+      assert.equal(await page.getByText("Chưa có dữ liệu", { exact: true }).count(), 1, "the neutral status tag");
+    });
+
     console.log("\n--- reviews ---");
     await scenario("V1", "review list renders authors, ratings and per-status tab counts", async ({ page }) => {
       await go(page, withStore("/reviews"));
@@ -883,6 +895,9 @@ async function main() {
         "the settings page sends widget keys the server whitelist silently drops (the merchant's change is lost)",
       );
       await expectText(page, "Đã lưu cấu hình");
+      const successShownAt = Date.now();
+      await waitUntil(async () => (await page.getByText("Đã lưu cấu hình").count()) === 0, { timeout: 5000 });
+      assert.ok(Date.now() - successShownAt < 3600, `the success toast stayed ${Date.now() - successShownAt} ms; the provider default is 2.5 s`);
     });
 
     await scenario("S2", "reloading after a save shows the saved value, not the default", async ({ page, state }) => {
@@ -907,6 +922,9 @@ async function main() {
       await title.fill("Bản nháp");
       await page.getByRole("button", { name: "Lưu thay đổi" }).click();
       await expectText(page, "boom");
+      await page.waitForTimeout(3500);
+      assert.ok((await page.getByText("boom").count()) > 0, "the error toast vanished before 3.5 s; failures stay up for 6 s");
+      await waitUntil(async () => (await page.getByText("boom").count()) === 0, { timeout: 4500 });
       assert.equal(await page.getByText("Đã lưu cấu hình").count(), 0, "success toast shown for a failed save");
       assert.equal(await title.inputValue(), "Bản nháp", "draft was discarded after a failed save");
       assert.equal(state.widgetConfig.titleText, "Đánh giá sản phẩm");
@@ -1034,6 +1052,15 @@ async function main() {
       assert.ok(measured.scrollWidth <= measured.clientWidth + 0.5, `the footer overflows its box: scrollWidth ${measured.scrollWidth} > clientWidth ${measured.clientWidth}`);
       for (const right of measured.rights) assert.ok(right <= measured.footerRight + 0.5, `a footer button ends at ${right}px, past the footer edge ${measured.footerRight}px`);
       assert.equal(new Set(measured.heights).size, 1, `the two buttons differ in height: ${measured.heights.join(" vs ")}`);
+    });
+
+    await scenario("S11", "at 375px the tab overflow button is named on settings, reviews and Q&A", { viewport: { width: 375, height: 812 } }, async ({ page }) => {
+      for (const route of ["/settings", "/reviews", "/qna"]) {
+        await go(page, withStore(route));
+        const more = page.getByRole("button", { name: "Xem thêm" });
+        await expectVisible(more, `${route} tab overflow button named "Xem thêm"`);
+        assert.equal(await more.count(), 1, `${route} has ${await more.count()} buttons named "Xem thêm"`);
+      }
     });
 
     console.log("\n--- install guide ---");

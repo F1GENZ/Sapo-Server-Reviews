@@ -2032,7 +2032,7 @@ const SettingsPage = () => {
               onChange={handleTabChange}
               tabBarGutter={8}
               items={settingsTabItems}
-              more={{ icon: <span aria-hidden="true">…</span> }}
+              more={{ icon: <span role="img" aria-label="Xem thêm">…</span> }}
             />
             </div>
             <div className="f1g-settings-footer">
