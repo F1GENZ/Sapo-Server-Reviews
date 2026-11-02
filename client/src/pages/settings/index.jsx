@@ -280,7 +280,39 @@ const getPreviewEmailMode = (config) => {
 /* ── Color field component ── */
 const ColorField = ({ label, value, onChange }) => {
   const inputId = useId();
+  const triggerRef = useRef(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  useEffect(() => {
+    if (!pickerOpen) return undefined;
+    const onKey = (event) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setPickerOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [pickerOpen]);
+  const focusIntoPanel = (attempt = 0) => {
+    requestAnimationFrame(() => {
+      const inners = document.querySelectorAll(".ant-color-picker-inner");
+      const container = inners.length ? inners[inners.length - 1] : null;
+      const hex = container ? container.querySelector("input.ant-input") || container.querySelector("input") : null;
+      if (hex) {
+        hex.focus();
+        if (document.activeElement === hex) return;
+      }
+      if (attempt < 12) {
+        window.setTimeout(() => focusIntoPanel(attempt + 1), 40);
+        return;
+      }
+      triggerRef.current?.focus();
+    });
+  };
+  const openPanelAndFocus = () => {
+    setPickerOpen(true);
+    focusIntoPanel();
+  };
   return (
     <div>
       <label htmlFor={inputId} className="f1g-field-label">{label}</label>
@@ -294,6 +326,7 @@ const ColorField = ({ label, value, onChange }) => {
           size="small"
         />
         <span
+          ref={triggerRef}
           className="f1g-color-trigger"
           role="button"
           tabIndex={0}
@@ -302,7 +335,8 @@ const ColorField = ({ label, value, onChange }) => {
           onKeyDown={(event) => {
             if (event.key !== "Enter" && event.key !== " ") return;
             event.preventDefault();
-            setPickerOpen((current) => !current);
+            if (pickerOpen) setPickerOpen(false);
+            else openPanelAndFocus();
           }}
         >
           <ColorPicker
@@ -310,7 +344,10 @@ const ColorField = ({ label, value, onChange }) => {
             onChange={(color) => onChange(color.toHexString().toLowerCase())}
             size="small"
             open={pickerOpen}
-            onOpenChange={setPickerOpen}
+            onOpenChange={(next) => {
+              setPickerOpen(next);
+              if (!next) requestAnimationFrame(() => triggerRef.current?.focus());
+            }}
           />
         </span>
       </Flex>

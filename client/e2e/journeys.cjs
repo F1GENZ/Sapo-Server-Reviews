@@ -498,7 +498,7 @@ async function main() {
       await expectText(page, "Tổng đánh giá", "total reviews KPI");
       await expectText(page, "Khách Chờ Duyệt", "recent review author from the seed");
       await expectText(page, "Khách Đã Duyệt", "recent review author from the seed");
-      assert.equal(await page.getByText("Chưa có dữ liệu để hiển thị").count(), 0, "dashboard rendered the empty state despite seeded data");
+      assert.equal(await page.getByText("Bắt đầu trong 3 bước").count(), 0, "dashboard rendered the empty-store checklist despite seeded data");
       const total = await page.locator("body").innerText();
       assert(/Tổng đánh giá\s*\n?\s*3\b/.test(total), `total reviews KPI is not the seeded 3: ${total.slice(0, 400)}`);
       await waitUntil(() => new URL(page.url()).searchParams.get("storeDomain") === STORE);
@@ -924,7 +924,7 @@ async function main() {
       await expectText(page, "boom");
       await page.waitForTimeout(3500);
       assert.ok((await page.getByText("boom").count()) > 0, "the error toast vanished before 3.5 s; failures stay up for 6 s");
-      await waitUntil(async () => (await page.getByText("boom").count()) === 0, { timeout: 4500 });
+      assert.ok(await waitUntil(async () => (await page.getByText("boom").count()) === 0, { timeout: 4500 }), "the error toast was still on screen 8 s after the failed save");
       assert.equal(await page.getByText("Đã lưu cấu hình").count(), 0, "success toast shown for a failed save");
       assert.equal(await title.inputValue(), "Bản nháp", "draft was discarded after a failed save");
       assert.equal(state.widgetConfig.titleText, "Đánh giá sản phẩm");
@@ -1013,7 +1013,7 @@ async function main() {
       assert.equal(await page.locator(".f1g-tab-dot").count(), 0, "dots clear after a successful save");
     });
 
-    await scenario("S12", "every colour control takes keyboard focus, opens its panel on Enter and closes on Escape", async ({ page }) => {
+    await scenario("S12", "every colour control takes keyboard focus, opens its panel on Enter, moves focus into the hex input and returns it on Escape", async ({ page }) => {
       await go(page, withStore("/settings"));
       const tabs = page.locator(".ant-tabs-nav [role=tab]");
       await expectVisible(tabs, "settings tabs");
@@ -1040,8 +1040,38 @@ async function main() {
       await page.keyboard.press("Enter");
       await expectVisible(page.locator(".ant-color-picker-panel").first(), "colour panel after Enter");
       await waitUntil(async () => (await trigger.getAttribute("aria-expanded")) === "true", { timeout: 5000 });
+      const diagnosis = await page.evaluate(() => {
+        const panels = [...document.querySelectorAll(".ant-color-picker-panel")];
+        const panel = panels[panels.length - 1];
+        const active = document.activeElement;
+        const hex = [...document.querySelectorAll("input")].find((n) => /^[0-9a-f]{6}$/i.test(n.value));
+        const chain = [];
+        let node = hex;
+        while (node && chain.length < 7) {
+          chain.push(`${node.tagName}.${String(node.className || "").split(" ").filter(Boolean).slice(0, 2).join(".")}`);
+          node = node.parentElement;
+        }
+        return {
+          panels: panels.length,
+          inputs: panel ? panel.querySelectorAll("input").length : -1,
+          panelCls: panel ? panel.className : null,
+          panelParentCls: panel && panel.parentElement ? panel.parentElement.className : null,
+          innerCount: document.querySelectorAll(".ant-color-picker-inner").length,
+          hexFound: Boolean(hex),
+          hexChain: chain,
+          activeTag: active ? active.tagName : null,
+          activeCls: active && active.className ? String(active.className).slice(0, 60) : null,
+        };
+      });
+      const focusInPanel = await page.waitForFunction(() => {
+        const active = document.activeElement;
+        return Boolean(active && active.closest(".ant-color-picker-inner"));
+      }, undefined, { timeout: 4000 }).then(() => true, () => false);
+      assert.ok(focusInPanel, `Enter opened the colour panel but focus never entered it, so a keyboard user cannot reach the hex input: ${JSON.stringify(diagnosis)}`);
       await page.keyboard.press("Escape");
       await waitUntil(async () => (await trigger.getAttribute("aria-expanded")) === "false", { timeout: 5000 });
+      const focusBack = await waitUntil(async () => trigger.evaluate((node) => document.activeElement === node), { timeout: 4000 });
+      assert.ok(focusBack, "Escape closed the colour panel but did not return focus to the swatch");
     });
 
     await scenario("S9", "helper text in every settings tab, inline code included, is at least 12 px", async ({ page }) => {
