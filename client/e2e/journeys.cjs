@@ -1021,6 +1021,55 @@ async function main() {
       assert.deepEqual(small, [], `text under 12 px in the settings tabs: ${small.join(" | ")}`);
     });
 
+    console.log("\n--- install guide ---");
+    const SCHEMA_SNIPPET_FILE = path.join(REPO_ROOT, "storefront", "theme", "f1genz-product-schema.bwt");
+    const expandAllPanels = async (page) => {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const closed = page.locator('.ant-collapse-header[aria-expanded="false"]');
+        if ((await closed.count()) === 0) return;
+        await closed.first().click();
+      }
+      throw new Error("a collapse panel never opened");
+    };
+    const normalizeBlock = (text) => String(text).replace(/\r\n/g, "\n").trim();
+
+    await scenario("G1", "the Dev guide carries every install step: loader, widgets, the schema file with offers, the slider and the checks", async ({ page }) => {
+      await go(page, withStore("/dev"));
+      await expectText(page, "Dev guide gắn code storefront");
+      await expandAllPanels(page);
+      const blocks = (await page.$$eval("pre", (nodes) => nodes.map((node) => node.textContent || ""))).map(normalizeBlock);
+      const schemaFile = normalizeBlock(readFileSync(SCHEMA_SNIPPET_FILE, "utf8"));
+      assert.ok(blocks.includes(schemaFile), "no code block shows f1genz-product-schema.bwt verbatim, so a merchant cannot copy the file from the app");
+      assert.ok(blocks.includes("{% include 'f1genz-product-schema' %}"), "the include line is not shown");
+      const slider = blocks.find((block) => block.startsWith("<f1genz-curated-slider"));
+      assert.ok(slider, "no code block shows the curated slider element");
+      assert.match(slider, /product-id="\{\{ product\.id \}\}"/);
+      assert.ok(slider.includes(`storeDomain="${STORE}"`), `the slider block lacks the store domain: ${slider}`);
+      const prose = (await page.locator(".f1g-dev-page .ant-typography").allInnerTexts()).join("\n");
+      for (const needle of ["offers", "aggregateRating", "autoProductSchema", "Cấu hình → Hiển thị", "No API URL", "Offers"]) {
+        assert.ok(prose.includes(needle), `the explanatory text never mentions ${needle}`);
+      }
+    });
+
+    await scenario("G2", "the operations guide starts with the theme step, links to the Dev guide and names offers", async ({ page }) => {
+      await go(page, withStore("/guide"));
+      await expectText(page, "Gắn code vào theme");
+      const steps = await page.locator(".ant-steps-item-title").allInnerTexts();
+      assert.equal(String(steps[0] || "").trim(), "Gắn code vào theme", `the first step is "${steps[0]}"`);
+      const body = await page.locator("body").innerText();
+      assert.ok(/offers/.test(body), "the guide never mentions offers");
+      await page.locator(".ant-steps-item").first().getByRole("link", { name: "Hướng dẫn kỹ thuật" }).click();
+      await waitUntil(() => new URL(page.url()).pathname === "/dev");
+      assert.equal(new URL(page.url()).pathname, "/dev");
+      assert.equal(new URL(page.url()).searchParams.get("storeDomain"), STORE, "the link dropped the store");
+    });
+
+    await scenario("G3", "the Dev guide with every panel open does not overflow at 375px", { viewport: { width: 375, height: 800 } }, async ({ page }) => {
+      await go(page, withStore("/dev"));
+      await expandAllPanels(page);
+      await assertNoHorizontalOverflow(page, "/dev with every panel open");
+    });
+
     console.log("\n--- authentication ---");
     await scenario("A1", "no session: a deep link goes to the login form and remembers the target", { auth: false }, async ({ page }) => {
       await go(page, withStore("/reviews", OTHER_STORE));

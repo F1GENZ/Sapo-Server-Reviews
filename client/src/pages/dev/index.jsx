@@ -75,6 +75,54 @@ const buildSnippets = ({ apiUrl, storeDomain }) => ({
 
   schema: `{% include 'f1genz-product-schema' %}`,
 
+  schemaFile: `{% comment %}
+  F1GENZ Reviews - product JSON-LD with aggregateRating (server-side rendered, no JS).
+  Reads product metafields in namespace f1genz_reviews: rating_count (integer), rating_avg (string "4.6").
+  Renders nothing unless there is at least one approved review: with 0 reviews there is no aggregateRating.
+  Use inside product.bwt with an include tag for f1genz-product-schema.
+  Filters used: escape only.
+{% endcomment %}
+{% if product %}
+  {% assign f1g_count = product.metafields.f1genz_reviews.rating_count %}
+  {% assign f1g_avg = product.metafields.f1genz_reviews.rating_avg %}
+  {% if f1g_count != blank and f1g_count != 0 and f1g_count != '0' and f1g_avg != blank and f1g_avg != 0 and f1g_avg != '0' %}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org/",
+    "@type": "Product",
+    "@id": "{{ canonical_url | escape }}#product",
+    "name": "{{ product.name | escape }}",
+    "url": "{{ canonical_url | escape }}",
+    {% if product.featured_image.src != blank %}"image": "{{ product.featured_image.src | escape }}",{% endif %}
+    {% if product.vendor != blank %}"brand": { "@type": "Brand", "name": "{{ product.vendor | escape }}" },{% endif %}
+    {% if product.price != blank %}
+    "offers": {
+      "@type": "Offer",
+      "url": "{{ canonical_url | escape }}",
+      "priceCurrency": "VND",
+      "price": "{{ product.price }}",
+      {% if product.available != nil %}"availability": "{% if product.available %}https://schema.org/InStock{% else %}https://schema.org/OutOfStock{% endif %}",{% endif %}
+      "itemCondition": "https://schema.org/NewCondition"
+    },
+    {% endif %}
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "{{ f1g_avg }}",
+      "reviewCount": "{{ f1g_count }}",
+      "bestRating": "5",
+      "worstRating": "1"
+    }
+  }
+  </script>
+  {% endif %}
+{% endif %}`,
+
+  slider: `<f1genz-curated-slider
+  product-id="{{ product.id }}"
+  storeDomain="${storeDomain}"
+  count="6"
+></f1genz-curated-slider>`,
+
   schemaComponent: `<f1genz-product-schema
   product-id="{{ product.id }}"
   storeDomain="${storeDomain}"
@@ -149,6 +197,7 @@ const buildDevSections = (snippets) => [
           Đoạn này đặt cấu hình runtime <Text code>{`{ apiUrl, storeDomain }`}</Text> (cùng cấu trúc app ghi vào metafield shop <Text code>f1genz.config</Text> khi cài đặt)
           và tải CSS/JS storefront từ <Text code>apiUrl</Text>, không lấy từ domain Pages admin.
           Nếu bản build admin chưa khai báo <Text code>VITE_STOREFRONT_API_URL</Text>, hãy thay <Text code>{API_URL_PLACEHOLDER}</Text> bằng host API của app.
+          <Text code>storeDomain</Text> luôn là tên miền <Text code>.mysapo.net</Text> của shop, không dùng tên miền riêng.
         </Paragraph>
         <CodeBlock code={snippets.assets} />
       </>
@@ -209,10 +258,21 @@ const buildDevSections = (snippets) => [
     children: (
       <>
         <Paragraph type="secondary" style={{ lineHeight: 1.7 }}>
-          Để công cụ tìm kiếm thấy điểm đánh giá mà không cần chạy JavaScript, chép file <Text code>storefront/theme/f1genz-product-schema.bwt</Text> vào thư mục <Text code>snippets/</Text> của theme rồi chèn bằng <Text code>{`{% include %}`}</Text> trong template sản phẩm.
-          Snippet đọc metafield <Text code>f1genz_reviews.rating_count</Text> và <Text code>rating_avg</Text>; sản phẩm chưa có đánh giá đã duyệt thì không xuất JSON-LD.
+          Để công cụ tìm kiếm thấy điểm đánh giá và giá mà không cần chạy JavaScript, tạo file <Text code>snippets/f1genz-product-schema.bwt</Text> trong theme, dán nguyên nội dung dưới đây vào file rồi chèn bằng <Text code>{`{% include %}`}</Text> trong template sản phẩm.
+        </Paragraph>
+        <CodeBlock code={snippets.schemaFile} />
+        <Paragraph type="secondary" style={{ marginTop: 14, lineHeight: 1.7 }}>
+          Snippet xuất hai khối: <Text code>aggregateRating</Text> (đọc metafield <Text code>f1genz_reviews.rating_count</Text> và <Text code>rating_avg</Text> do app ghi; sản phẩm chưa có đánh giá đã duyệt thì không xuất gì) và <Text code>offers</Text> (giá lấy từ <Text code>product.price</Text>, tiền tệ VND, còn hàng hay hết hàng lấy từ <Text code>product.available</Text>).
+          Theme đã dán bản cũ của snippet không có khối <Text code>offers</Text> thì dán đè bằng bản trên.
+        </Paragraph>
+        <Paragraph type="secondary" style={{ marginTop: 14, lineHeight: 1.7 }}>
+          Chèn dòng sau vào template sản phẩm:
         </Paragraph>
         <CodeBlock code={snippets.schema} />
+        <Paragraph type="secondary" style={{ marginTop: 14, lineHeight: 1.7 }}>
+          Mỗi sản phẩm chỉ nên có một khối JSON-LD <Text code>Product</Text> mang <Text code>aggregateRating</Text>: gỡ khối tương tự có sẵn trong theme.
+          Khi trang có <Text code>og:type</Text> là <Text code>product</Text> mà chưa có khối <Text code>Product</Text> nào chứa cả <Text code>aggregateRating</Text> và <Text code>offers</Text>, script storefront tự dựng thêm một khối trên trình duyệt; đặt <Text code>autoProductSchema: false</Text> trong cấu hình ở mục 1 để tắt.
+        </Paragraph>
         <Paragraph type="secondary" style={{ marginTop: 14, lineHeight: 1.7 }}>
           Nếu không thể thêm file snippet, dùng phần tử <Text code>f1genz-product-schema</Text> (dựng JSON-LD trên trình duyệt). Chỉ dùng một trong hai cách để không có hai khối <Text code>aggregateRating</Text>.
           Phần tử còn đọc <Text code>price</Text>, <Text code>currency</Text>, <Text code>sku</Text>, <Text code>mpn</Text>, <Text code>gtin</Text>, <Text code>description</Text>, <Text code>product-image</Text>, <Text code>product-url</Text>, <Text code>availability</Text> và <Text code>max-reviews</Text>.
@@ -222,11 +282,29 @@ const buildDevSections = (snippets) => [
     ),
   },
   {
+    key: "slider",
+    label: (
+      <Flex align="center" gap={8}>
+        <StarOutlined style={{ color: "#fadb14" }} />
+        <Text strong>5. Slider đánh giá nổi bật (tuỳ chọn)</Text>
+      </Flex>
+    ),
+    children: (
+      <>
+        <Paragraph type="secondary" style={{ lineHeight: 1.7 }}>
+          Hàng thẻ đánh giá nổi bật của chính sản phẩm đang xem. Dán dưới khối đánh giá ở template sản phẩm; cần <Text code>product-id</Text> và <Text code>storeDomain</Text>.
+          Bật dải đánh giá nổi bật và số đánh giá trong dải (5–15) chỉnh trong <Text strong>Cấu hình → Hiển thị</Text>; thuộc tính <Text code>count</Text> chỉ là gợi ý, máy chủ vẫn áp dụng cấu hình của shop.
+        </Paragraph>
+        <CodeBlock code={snippets.slider} />
+      </>
+    ),
+  },
+  {
     key: "performance",
     label: (
       <Flex align="center" gap={8}>
         <WarningOutlined style={{ color: "#fa8c16" }} />
-        <Text strong>5. Tối ưu responsive / tốc độ</Text>
+        <Text strong>6. Tối ưu responsive / tốc độ</Text>
       </Flex>
     ),
     children: (
@@ -312,9 +390,10 @@ const DevGuidePage = () => {
               <Text type="secondary">1. Mở một product có review đã duyệt.</Text>
               <Text type="secondary">2. Kiểm tra Network chỉ có batch summary cho listing, không gọi lẻ quá nhiều.</Text>
               <Text type="secondary">3. Kiểm tra form theo đúng cấu hình bắt buộc trong admin.</Text>
-              <Text type="secondary">4. Test Rich Results để chắc schema có giá và review hợp lệ.</Text>
+              <Text type="secondary">4. Test Rich Results để chắc schema có cả giá (<Text code>Offers</Text>) và điểm đánh giá (<Text code>AggregateRating</Text>) hợp lệ.</Text>
               <Text type="secondary">5. Với chế độ 2 tab, mở tab Hỏi đáp và kiểm tra Q&A mới bắt đầu gọi API.</Text>
-              <Text type="secondary">6. Nếu đổi theme, gắn lại code thủ công ở theme mới theo đúng các snippet phía trên.</Text>
+              <Text type="secondary">6. Mở Console của trình duyệt: không được có lỗi <Text code>[f1genz-storefront]</Text>; lỗi <Text code>No API URL</Text> nghĩa là đoạn ở mục 1 chưa có <Text code>apiUrl</Text>.</Text>
+              <Text type="secondary">7. Nếu đổi theme, gắn lại code thủ công ở theme mới theo đúng các snippet phía trên.</Text>
             </Flex>
           </Card>
         </Flex>

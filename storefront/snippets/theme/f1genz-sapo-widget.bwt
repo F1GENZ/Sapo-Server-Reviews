@@ -58,3 +58,10 @@
   review-count="{{ product.metafields.f1genz_reviews.rating_count }}"
 ></f1genz-rating-badge>
 {% endif %}
+
+{% comment %} 5. Curated review slider (optional) - product.bwt, below the reviews widget. Needs product-id. The merchant switches it on or off and sets 5-15 cards under Settings > Display; the server enforces both and count is only a hint. {% endcomment %}
+<f1genz-curated-slider
+  product-id="{{ product.id }}"
+  storeDomain="STORE_DOMAIN"
+  count="6"
+></f1genz-curated-slider>

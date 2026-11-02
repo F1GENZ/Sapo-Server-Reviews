@@ -12,6 +12,7 @@ import {
 } from "antd";
 import {
   CheckCircleOutlined,
+  CodeOutlined,
   HomeOutlined,
   ImportOutlined,
   QuestionCircleOutlined,
@@ -31,6 +32,17 @@ const faqItems = [
       <Paragraph type="secondary" style={{ margin: 0, lineHeight: 1.7 }}>
         Kiểm tra đánh giá đã ở trạng thái <Text strong>Đã duyệt</Text>, sản phẩm có đúng
         <Text code> productId</Text>, và storefront đã được gắn code theo mục <Link to="/dev">Dev guide</Link>.
+      </Paragraph>
+    ),
+  },
+  {
+    key: "google-stars",
+    label: "Sao đánh giá chưa hiện trong kết quả Google?",
+    children: (
+      <Paragraph type="secondary" style={{ margin: 0, lineHeight: 1.7 }}>
+        Mở Rich Results Test với địa chỉ trang sản phẩm: phải thấy cả <Text code>Offers</Text> và <Text code>AggregateRating</Text>.
+        Thiếu <Text code>Offers</Text> nghĩa là theme còn bản cũ của snippet <Text code>f1genz-product-schema</Text>, hãy dán lại bản mới ở mục 4 của <Link to="/dev">Dev guide</Link>.
+        Sản phẩm chưa có đánh giá đã duyệt thì không có khối rating.
       </Paragraph>
     ),
   },
@@ -138,6 +150,16 @@ const GuidePage = () => (
           status="process"
           items={[
             {
+              title: "Gắn code vào theme",
+              description: (
+                <>
+                  Dán loader, khối đánh giá, badge, khối JSON-LD có <Text code>offers</Text> và <Text code>aggregateRating</Text>, slider (tuỳ chọn) theo{" "}
+                  <Link to="/dev">Hướng dẫn kỹ thuật</Link>, rồi kiểm tra bằng Rich Results Test.
+                </>
+              ),
+              icon: <CodeOutlined />,
+            },
+            {
               title: "Kiểm tra tổng quan",
               description: "Xem tổng số đánh giá, hỏi đáp và các đánh giá gần đây ngay tại màn Tổng quan.",
               icon: <CheckCircleOutlined />,
@@ -182,7 +204,7 @@ const GuidePage = () => (
           <Text type="secondary">3. Nếu bật chỉ khách đã mua mới đánh giá, theme đã truyền email/phone khách hàng.</Text>
           <Text type="secondary">4. Review test hiển thị đúng ở trang sản phẩm và product card.</Text>
           <Text type="secondary">5. Hỏi đáp test hiển thị đúng trạng thái đã trả lời/chờ trả lời.</Text>
-          <Text type="secondary">6. JSON-LD không lỗi trong Rich Results Test.</Text>
+          <Text type="secondary">6. JSON-LD có cả <Text code>offers</Text> và <Text code>aggregateRating</Text>, không lỗi trong Rich Results Test.</Text>
         </Flex>
       </Card>
     </div>
