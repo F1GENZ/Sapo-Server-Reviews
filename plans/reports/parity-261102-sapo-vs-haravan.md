@@ -78,8 +78,8 @@ Decision vocabulary: `PORTED` (behaviour copied into Sapo, test proves it), `ALR
 | Rating badge SSR attrs | yes | yes | no | ALREADY_EQUAL |
 | JSON-LD Product+AggregateRating | yes | yes | no | ALREADY_EQUAL |
 | Escaping | `escapeHTML` + `formatSafeRichText` | `escapeHTML` (51 call sites) + JSON-LD via textContent | no | ALREADY_EQUAL |
-| Accessibility names / focus restore | partial (R65/R70 fixed on Haravan) | partial | yes | PARTIAL → widget fixes in round 2 where cheap; full audit BLOCKED (needs browser measurement per state) |
-| Size budget (gzip) | 30 kB cap, Haravan 30 kB widget JS | 29.9 kB JS / 5.2 kB CSS | no | ALREADY_EQUAL (measured after slider, still under cap) |
+| Accessibility names / focus restore | names (R70) plus focus save/restore and a dialog focus trap (`restoreFocus` `:384-391`, used at `:1333,1682`; trap `:1372-1383` in `E:/Work/apps/F1GENZ_Review/server/storefront/snippets/f1genz-storefront.js`) | names only: `aria-label` on the sort select, `role="dialog" aria-modal="true"` and Escape on the dialogs; no focus save/restore, no focus trap (no `restoreFocus`, no `activeElement` use in `storefront/snippets/f1genz-storefront.js`) | yes | BLOCKED — port the Haravan focus save/restore and trap and prove it with a keyboard test per state; round 2 changed nothing here |
+| Size budget (gzip level 6, KiB = 1024) | served widget 25.6 KiB JS (26 225 B; 97 725 B raw, minified at build by `scripts/storefront-minify.js`), 5.4 KiB CSS (5 551 B) | served widget 29.1 KiB JS (29 793 B; 137 954 B raw, not minified), 5.1 KiB CSS (5 186 B); `check-performance-budget.js` on 70389da: 29.1 / 5.1 KiB | no | ALREADY_EQUAL for the 30 KiB cap (927 B of slack); Sapo's JS is 13.6% larger than the file Haravan serves because Sapo ships the readable source |
 | AA text on merchant accent | white text on `#f59e0b` = 2.15:1 | `--f1genz-sapo-review-on-accent` picks dark text when white < 4.5:1 | no | BETTER_ON_SAPO (e2e `B8`; config colours unchanged) |
 
 ## 4. Billing / tiers (user decision)
@@ -162,9 +162,9 @@ Rows that do not carry over are still listed with the Sapo mechanism that makes 
 | R60 | PORT default mismatch | Deploy script reads `.env` PORT | ALREADY_EQUAL |
 | R61 | YouTube link silently dropped | Widget does not accept external links; public media must be own R2 URL | NOT_APPLICABLE |
 | R62 | Client CI resolves server path wrongly | `ci-e2e.yml` runs both suites in one checkout | ALREADY_EQUAL |
-| R63 | Storefront JS budget exceeded | 27.8 kB ≤ 30 kB (round 1) | ALREADY_EQUAL |
+| R63 | Storefront JS budget exceeded | 29.1 KiB ≤ 30 KiB gzip level 6 on 70389da (27.8 kB in round 1, before the curated slider); 927 B of slack | ALREADY_EQUAL |
 | R64 | SPA reads `?session_token=` | Handoff code exchange (`/auth/session/exchange`) | BETTER_ON_SAPO |
-| R65 | Sort select focus lost on re-render | Widget re-renders list on sort change | PORTED where the fix is a render guard; full keyboard audit BLOCKED (no state matrix run yet) |
+| R65 | Sort select focus lost on re-render | Not fixed: the select is rendered by `renderSummary()` (`f1genz-storefront.js:1850`) and a sort change rewrites the summary and list regions (`handleChange`, `:1552-1555`); `updateReviewRegion` (`:1303-1310`) skips only identical markup and the `selected` attribute differs after a change; the widget has no `restoreFocus`/`activeElement` code (Haravan: `restoreFocus`, `:384-391`) | BLOCKED — port the focus save/restore and prove it with a keyboard test (not done in round 2; established by reading the code, not measured in a browser) |
 | R66 | Storefront edge cases (schema price source, `<` in labels, double decode) | Sapo widget: JSON-LD from rendered DOM/price element, `escapeHTML` on labels | ALREADY_EQUAL (spot-checked) |
 | R67 | `redirectIfChanged` no host allowlist | `authFlow.js` redirect target comes from the API install URL, not from a query param | ALREADY_EQUAL |
 | R68 | Public JSON has no cache control | Same | PORTED |
@@ -233,21 +233,27 @@ Rows that do not carry over are still listed with the Sapo mechanism that makes 
 5. Hardening: `127.0.0.1` bind, `statement_timeout` on the app role, `unhandledRejection` logging, stale-uninstall fence, Q&A product check.
 6. UX: settings action bar + tab strip + scroll container + reset scope + one save for the whole config (D01–D28). Accent/verified defaults stay byte-identical (`#f59e0b` / `#01ab56`) because live shops that never saved the key inherit them; AA is met by choosing dark text on a low-contrast accent (`--f1genz-sapo-review-on-accent`), not by recolouring.
 
-## 8. Round-2 run (measured 2026-11-02, commit 82bdbf8)
+## 8. Round-2 run (measured 2026-11-02, final commit 70389da)
 
-| Decision | Rows |
-|---|---|
-| PORTED | 24 |
-| ALREADY_EQUAL | 58 |
-| BETTER_ON_SAPO | 14 |
-| NOT_APPLICABLE | 22 |
-| BLOCKED | 3 (AI highlights and AI seeds need a paid key plus a credit ledger; premium/pricing need a Sapo billing API that does not exist) |
+Counted by the first decision word of each row (a row that carries a residual, such as R09 or `PORTED, key BLOCKED`, counts once under its first word). Recounted from the tables above in round 3; the 24 / 58 / 14 / 22 / 3 (121 rows) that earlier versions of this file and `sapo.r2.report.md` §2 carried matched no table here.
 
-Proof run: server unit 231/231, server HTTP e2e 95/95 (Redis state backend), client journeys 46/46, storefront widget 36/36, client unit 5/5, budget 107.0 / 167.8 / 29.2 / 5.1 kB.
+| Decision | §1–3 (59 rows) | §5 R01–R70 (70) | §6 CR01–CR48 (48) | Total (177) |
+|---|---|---|---|---|
+| PORTED | 15 | 10 | 5 | 30 |
+| ALREADY_EQUAL | 31 | 20 | 26 | 77 |
+| BETTER_ON_SAPO | 6 | 14 | 3 | 23 |
+| NOT_APPLICABLE | 3 | 25 | 13 | 41 |
+| BLOCKED | 4 | 1 | 1 | 6 |
+
+BLOCKED rows: AI highlights, AI seeds and premium/pricing (a paid key, a credit ledger and a Sapo billing API that does not exist: owner decisions), plus three widget accessibility rows that are engineering debt, not owner decisions: the §3 focus save/restore and trap row, R65 and CR40.
+
+Proof run (CI run 41410959570 on commit 70389da: every job success; the reusable workflow's own server-verify job is skipped on master pushes by design): server unit 231/231, server HTTP e2e 95/95 (Redis state backend), client journeys 47/47, storefront widget 37/37, client unit 5/5; the CI budget gate printed 107.0 / 167.8 / 29.1 / 5.1 kB (initial JS / largest JS / storefront JS / storefront CSS, gzip, KB = 1024). `/readyz` on the VPS reports `build=70389dac…`, `status=ok`, redis and db ok (re-read 2026-11-02 08:48 UTC).
 
 Live production checks: bulk approve → 7 reviews, reply, delete; import dry-run → apply (2 rows); media ticket → upload → review with image; Q&A answer; outbound webhook delivered (HTTP 200, one attempt); `products/update` webhook ingested (2 processed); metafields sync-all (synced 1); diagnostics export (1754 B); widget on the PDP with 8 reviews, curated slider and JSON-LD `AggregateRating` (4.6/8); accent `#f59e0b` and verified `#01ab56` unchanged, `--f1genz-sapo-review-on-accent` now `#1a1a1a`.
 
-Lifecycle on the live shop: uninstall through the Sapo admin trash icon → `AppInstall.status=uninstalled`, generation 6, tokenVersion 5, token cleared, admin session 401, data kept (8 reviews / 3 questions / 49 catalog rows); reinstall through `GET /api/oauth/install/start` → consent → callback/handoff → `active`, generation 7, tokenVersion 6, 8 reviews still served at 4.6, SPA dashboard renders. During the uninstall window the public endpoints still answered 200; by code (`review.service.ts:1065`) the list returns an empty page and the config falls back to defaults for a non-serving store.
+Second live pass after the first round-2 report: bulk delete now asks first (`Popconfirm`, "Xoá vĩnh viễn 1 đánh giá?") and then reports the server's real counts (`Đã cập nhật 0 mục, đã xoá 1 mục, bỏ qua 0 mục`; a throwaway hidden review was created and removed, list 9 → 8); the admin footer shows the real build stamp instead of the pinned `2026-04-01T11:09`; the Pages deploy from `client/` keeps the `/api/*` proxy (`401 application/json` on `/api/app/session`). The shop's PDP carries `og:type=product` and `og:price:amount=392.000`, but its theme sets `autoProductSchema:false` and still has the old schema snippet, so `offers` only appears after the shop syncs `storefront/theme/f1genz-product-schema.bwt`.
 
-Parity probe (30 sequential GETs from this machine, p50/p95 ms): config 100/121 vs Haravan 109/126; summaries 98/119 vs 167/182; list 111/164 vs 169/185; slider 99/119 vs 99/111 (Haravan answers with an empty slider). Widget JS gzip 29.7 kB vs 26.1 kB; CSS 5.1 kB vs 5.5 kB.
+Lifecycle on the live shop: uninstall through the Sapo admin trash icon → `AppInstall.status=uninstalled`, generation 6, tokenVersion 5 (the token ciphertext is deliberately not read, so nothing is claimed about its content), data kept (8 reviews / 3 questions / 49 catalog rows); reinstall through `GET /api/oauth/install/start` → consent → callback/handoff → `active`, generation 7, tokenVersion 6, 8 reviews still served at 4.6, SPA dashboard renders (the database still reads `active`, 7, 6 and 8 / 3 / 49 on 2026-11-02 08:49 UTC). During the uninstall window the public endpoints still answered 200; by code the list returns an empty page (`review.service.ts:1065-1066`) and the config falls back to defaults (`:1103`) for a non-serving store.
+
+Parity probe (30 sequential GETs from this machine in round 2, not re-run in round 3, p50/p95 ms): config 100/121 vs Haravan 109/126; summaries 98/119 vs 167/182; list 111/164 vs 169/185; slider 99/119 vs 99/111 (Haravan answers with an empty slider). Widget assets, gzip level 6 of the file each API serves, re-measured from the live URLs in round 3: JS Sapo 29 793 B = 29.1 KiB (137 954 B raw, not minified) vs Haravan 26 225 B = 25.6 KiB (97 725 B raw, minified at build), so Sapo is 13.6% larger (round 2 wrote "Haravan 26.1 kB" and "+12%", mixing 1000- and 1024-byte units); CSS Sapo 5 186 B = 5.1 KiB vs Haravan 5 551 B = 5.4 KiB. Minifying the Sapo widget would remove the gap; not done in round 2.
 
