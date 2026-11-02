@@ -45,12 +45,12 @@ Metafield namespaces written by the app: shop metafields in `f1genz` (`config`, 
 ## Webhooks
 
 - [x] H01 — `products/create`, `products/update`, `products/delete` received and idempotent
-- [ ] H02 — `orders/create`, `orders/paid`, `orders/cancelled`, `orders/fulfilled` received
+- [x] H02 — `orders/create`, `orders/paid`, `orders/cancelled`, `orders/fulfilled` received (one real order on f1genz-purity: `orders/create` 10:32:57Z, `orders/updated` 10:33:10Z, `orders/paid` 10:33:10Z, `orders/cancelled` 10:35:32Z, all `processed`; `orders/fulfilled` was NOT exercised: the order was cancelled before fulfilment and a cancelled order cannot be fulfilled. It normalizes to `orders/fulfilled` (`src/sapo/webhook-topic-normalizer.ts:92`) and falls into the same `topic.startsWith('orders/')` branch as the proven topics, but it is not covered live or by any test — the only order-topic tests use `orders/paid` (`test/durability.test.ts:402`, `test/s3-privacy-webhooks.test.ts:218`))
 - [x] H03 — `app/uninstalled` triggers cleanup (token nulled, domains tombstoned)
 - [ ] H04 — `store/update` re-saves the store's domain mappings
 - [x] H05 — Webhook signature verified (Base64 HMAC-SHA256 in `x-sapo-hmac-sha256`, timing-safe compare) (a delivery signed with another secret answered 401)
 - [x] H06 — Deterministic event key: `x-sapo-event-id` when non-empty, otherwise content hash; `app/*` and `store/*` keyed with `lifecycleGeneration`; no random fallback (the same signed body delivered twice produced one `WebhookEvent` row and `{"duplicate":true}`; a delivery carrying a non-empty `x-sapo-event-id` got its own row)
-- [ ] H07 — Replayed or out-of-order `orders/*` deliveries do not overwrite newer purchase rows (`source_updated_at` guard)
+- [x] H07 — Replayed or out-of-order `orders/*` deliveries do not overwrite newer purchase rows (`source_updated_at` guard) (a signed `orders/updated` with `modified_on 2026-11-02T09:00:00Z` and `financial_status=voided`, delivered after the 10:33:09Z update, was stored `processed` and left the mirror at `paid` with `source_updated_at=1793615589000` unchanged)
 - [x] H08 — A replayed signed body delivered with another store's `x-sapo-shop-domain` is rejected when the payload names a different store or the product/order id is stored under the first store (`products/delete`, `orders/*`) (a signed `products/update` carrying `x-sapo-shop-domain: other-shop.mysapo.net` answered 400 `Missing webhook storeDomain` and wrote no row)
 - [ ] H09 — A webhook for an `uninstalled` store is marked `ignored`, not retried (an unknown topic is stored as `ignored` and never processed; the uninstalled-store path is covered by `test/lifecycle.test.ts` but was not re-run by hand after the last reinstall)
 
@@ -62,15 +62,15 @@ Metafield namespaces written by the app: shop metafields in `f1genz` (`config`, 
 - [x] X04 — `APP_SESSION_SECRET` ≠ `SAPO_CLIENT_SECRET` (distinct); the sample `DATA_ENCRYPTION_KEY` is refused at boot
 - [x] X05 — CORS allowlist fail-closed (not permissive reflector)
 - [x] X06 — Rate limit: auth endpoints throttled, 429 handled
-- [ ] X07 — Per-product Redis write lock (`acquireLock`/`releaseLock`) guards `public_summary` writes
+- [x] X07 — Per-product Redis write lock (`acquireLock`/`releaseLock`) guards `public_summary` writes (20 parallel `POST /api/admin/reviews/sync-metafield` for product 95252031: 20/20 HTTP 201 `synced:1, queued:0`, no 5xx, Sapo still holds exactly one `f1genz_reviews.public_summary` = `{"avg":4.6,"count":8,…}` matching the public API, and `metafield_sync_pending` stayed at 0 rows)
 - [x] X08 — Production boot fails without `TRUST_PROXY` in the environment
 
 ## Data Integrity
 
 - [x] D01 — Catalog backfill syncs products from Sapo API to Postgres
-- [ ] D02 — Order mirror fills `customer_purchases` from `orders/*` webhooks received after install (no backfill of earlier orders)
+- [x] D02 — Order mirror fills `customer_purchases` from `orders/*` webhooks received after install (no backfill of earlier orders) (order 376610917 created after install wrote one row `376610917|95252031|paid`, which then carried `cancelled_at=1793615730000` after the cancel webhook and `source_updated_at` tracking the order's `modified_on`; a public review submitted with that email got `verified=true` while the row was paid and `verified=false` after the cancel, so the mark reads the mirror exactly as `isEligiblePurchaseStatus` defines)
 - [x] D03 — `public_summary` metafield matches the Postgres summary (no drift) — Sapo keeps metafields across a rebuild of the review database, so a product rated by earlier tests went on serving `avg-rating="4" review-count="3"` after the reviews were gone; `POST /api/admin/reviews/sync-metafield` with the product id cleared it (`withRating=0` on `/collections/all`), and it must be run for every product that still carries a rating before a store is handed over
-- [ ] D04 — Concurrent review status changes don't lose data (per-product Redis lock)
+- [x] D04 — Concurrent review status changes don't lose data (per-product Redis lock) (20 rounds of two parallel PATCHes, `approved` vs `hidden`, on one temporary review: 40/40 HTTP 200, no 5xx. Observed end state: the row is `hidden` in Postgres — one of the two requested values — absent from the public list, and the summary still `count 8 / avg 4.6` matching the public API; no intermediate round was read back, so this proves the end state is a single valid value, not that every round converged; the temporary review was deleted afterwards)
 - [x] D05 — A product with no live `catalog_products` row is refused by the public submit routes (`product_not_found`)
 
 ## Media
