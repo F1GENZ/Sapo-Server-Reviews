@@ -196,7 +196,7 @@ const WebhooksPage = () => {
       />
       <Flex justify="space-between" align="center" gap={12} wrap style={{ marginBottom: 16 }}>
         <div>
-          <Title level={4} style={{ margin: 0 }}>Tích hợp webhook</Title>
+          <Title level={4} style={{ margin: 0 }}>Tích hợp</Title>
           <Text type="secondary">
             Đẩy sự kiện đánh giá và hỏi đáp sang hệ thống của bạn ngay khi chúng xảy ra.
           </Text>

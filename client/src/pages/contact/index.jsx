@@ -73,7 +73,7 @@ const ContactItem = ({ icon, label, value, href, tag }) => (
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          style={{ display: "block", fontSize: 14, fontWeight: 600, lineHeight: 1.5 }}
+          style={{ display: "block", fontSize: 14, fontWeight: 600, lineHeight: "24px" }}
         >
           {value}
         </a>

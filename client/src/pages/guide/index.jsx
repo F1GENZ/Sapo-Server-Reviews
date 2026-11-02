@@ -31,7 +31,7 @@ const faqItems = [
     children: (
       <Paragraph type="secondary" style={{ margin: 0, lineHeight: 1.7 }}>
         Kiểm tra đánh giá đã ở trạng thái <Text strong>Đã duyệt</Text>, sản phẩm có đúng
-        <Text code> productId</Text>, và storefront đã được gắn code theo mục <Link to="/dev">Dev guide</Link>.
+        <Text code> productId</Text>, và storefront đã được gắn code theo mục <Link to="/dev">Hướng dẫn kỹ thuật</Link>.
       </Paragraph>
     ),
   },
@@ -41,7 +41,7 @@ const faqItems = [
     children: (
       <Paragraph type="secondary" style={{ margin: 0, lineHeight: 1.7 }}>
         Mở Rich Results Test với địa chỉ trang sản phẩm: phải thấy cả <Text code>Offers</Text> và <Text code>AggregateRating</Text>.
-        Thiếu <Text code>Offers</Text> nghĩa là theme còn bản cũ của snippet <Text code>f1genz-product-schema</Text>, hãy dán lại bản mới ở mục 4 của <Link to="/dev">Dev guide</Link>.
+        Thiếu <Text code>Offers</Text> nghĩa là theme còn bản cũ của snippet <Text code>f1genz-product-schema</Text>, hãy dán lại bản mới ở mục 4 của <Link to="/dev">Hướng dẫn kỹ thuật</Link>.
         Sản phẩm chưa có đánh giá đã duyệt thì không có khối rating.
       </Paragraph>
     ),
@@ -83,7 +83,7 @@ const faqItems = [
     children: (
       <Paragraph type="secondary" style={{ margin: 0, lineHeight: 1.7 }}>
         Theme cần truyền <Text code>customer-email</Text> hoặc <Text code>customer-phone</Text> vào widget theo
-        <Link to="/dev"> Dev guide</Link>. Khách chưa đăng nhập sẽ thấy CTA đăng nhập; khách đã đăng nhập nhưng chưa có đơn paid/fulfilled sẽ không mở form.
+        <Link to="/dev"> Hướng dẫn kỹ thuật</Link>. Khách chưa đăng nhập sẽ thấy CTA đăng nhập; khách đã đăng nhập nhưng chưa có đơn paid/fulfilled sẽ không mở form.
       </Paragraph>
     ),
   },
@@ -127,7 +127,7 @@ const GuidePage = () => (
       showIcon
       style={{ marginBottom: 16 }}
       message="Trang này dành cho vận hành"
-      description="Phần gắn code vào theme đã tách riêng sang Dev guide để tránh nhầm giữa thao tác quản trị và thao tác kỹ thuật."
+      description="Phần gắn code vào theme đã tách riêng sang Hướng dẫn kỹ thuật để tránh nhầm giữa thao tác quản trị và thao tác kỹ thuật."
     />
 
     <div
@@ -199,7 +199,7 @@ const GuidePage = () => (
           <Text strong>Checklist trước khi bàn giao</Text>
         </Flex>
         <Flex vertical gap={10}>
-          <Text type="secondary">1. Storefront đã gắn code theo <Link to="/dev">Dev guide</Link>.</Text>
+          <Text type="secondary">1. Storefront đã gắn code theo <Link to="/dev">Hướng dẫn kỹ thuật</Link>.</Text>
           <Text type="secondary">2. Form bắt buộc đúng với cấu hình đang bật.</Text>
           <Text type="secondary">3. Nếu bật chỉ khách đã mua mới đánh giá, theme đã truyền email/phone khách hàng.</Text>
           <Text type="secondary">4. Review test hiển thị đúng ở trang sản phẩm và product card.</Text>

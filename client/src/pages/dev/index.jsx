@@ -336,14 +336,14 @@ const DevGuidePage = () => {
       <Breadcrumb
         items={[
           { title: <Link to="/"><HomeOutlined /></Link> },
-          { title: "Dev guide" },
+          { title: "Hướng dẫn kỹ thuật" },
         ]}
         style={{ marginBottom: 16 }}
       />
 
       <Flex align="flex-start" justify="space-between" gap={16} wrap="wrap" style={{ marginBottom: 18 }}>
         <div style={{ minWidth: 0 }}>
-          <Title level={4} style={{ margin: 0 }}>Dev guide gắn code storefront</Title>
+          <Title level={4} style={{ margin: 0 }}>Hướng dẫn kỹ thuật</Title>
           <Text type="secondary" style={{ fontSize: 13 }}>
             Tài liệu kỹ thuật để dev theme gắn widget Review/Q&A, badge rating và JSON-LD.
           </Text>

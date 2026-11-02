@@ -1994,9 +1994,15 @@ const SettingsPage = () => {
           .f1g-settings-footer__actions {
             width: 100%;
             margin-left: 0;
+            align-items: stretch;
           }
           .f1g-settings-footer__actions .ant-btn {
-            flex: 1;
+            flex: 1 1 0;
+            min-width: 0;
+            height: auto;
+            padding-block: 4px;
+            line-height: 1.3;
+            white-space: normal;
           }
         }
       `}</style>

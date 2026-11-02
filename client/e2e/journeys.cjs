@@ -1021,6 +1021,21 @@ async function main() {
       assert.deepEqual(small, [], `text under 12 px in the settings tabs: ${small.join(" | ")}`);
     });
 
+    await scenario("S10", "at 375px the footer buttons stay inside the card and share one height", { viewport: { width: 375, height: 812 } }, async ({ page }) => {
+      await go(page, withStore("/settings"));
+      await expectVisible(page.locator(".f1g-settings-footer"), "settings footer");
+      const measured = await page.evaluate(() => {
+        const node = document.querySelector(".f1g-settings-footer");
+        const box = node.getBoundingClientRect();
+        const buttons = [...node.querySelectorAll(".f1g-settings-footer__actions .ant-btn")].map((button) => button.getBoundingClientRect());
+        return { footerRight: box.right, rights: buttons.map((rect) => rect.right), heights: buttons.map((rect) => Math.round(rect.height)), scrollWidth: node.scrollWidth, clientWidth: node.clientWidth };
+      });
+      assert.equal(measured.rights.length, 2, "the reset and save buttons");
+      assert.ok(measured.scrollWidth <= measured.clientWidth + 0.5, `the footer overflows its box: scrollWidth ${measured.scrollWidth} > clientWidth ${measured.clientWidth}`);
+      for (const right of measured.rights) assert.ok(right <= measured.footerRight + 0.5, `a footer button ends at ${right}px, past the footer edge ${measured.footerRight}px`);
+      assert.equal(new Set(measured.heights).size, 1, `the two buttons differ in height: ${measured.heights.join(" vs ")}`);
+    });
+
     console.log("\n--- install guide ---");
     const SCHEMA_SNIPPET_FILE = path.join(REPO_ROOT, "storefront", "theme", "f1genz-product-schema.bwt");
     const expandAllPanels = async (page) => {
@@ -1035,7 +1050,7 @@ async function main() {
 
     await scenario("G1", "the Dev guide carries every install step: loader, widgets, the schema file with offers, the slider and the checks", async ({ page }) => {
       await go(page, withStore("/dev"));
-      await expectText(page, "Dev guide gắn code storefront");
+      await expectVisible(page.getByRole("heading", { level: 4, name: "Hướng dẫn kỹ thuật" }), "technical guide title");
       await expandAllPanels(page);
       const blocks = (await page.$$eval("pre", (nodes) => nodes.map((node) => node.textContent || ""))).map(normalizeBlock);
       const schemaFile = normalizeBlock(readFileSync(SCHEMA_SNIPPET_FILE, "utf8"));
@@ -1068,6 +1083,35 @@ async function main() {
       await go(page, withStore("/dev"));
       await expandAllPanels(page);
       await assertNoHorizontalOverflow(page, "/dev with every panel open");
+    });
+
+    console.log("\n--- labels and click targets ---");
+    await scenario("C1", "every link on the contact page is a click target of at least 24 px", async ({ page }) => {
+      await go(page, withStore("/contact"));
+      await expectText(page, "Liên hệ hỗ trợ");
+      const small = await page.evaluate(() => [...document.querySelectorAll(".ant-layout-content a[href]")]
+        .filter((node) => node.offsetParent !== null)
+        .map((node) => ({ text: (node.textContent || "").trim().slice(0, 40), width: Math.round(node.getBoundingClientRect().width), height: Math.round(node.getBoundingClientRect().height) }))
+        .filter((item) => item.height < 24 || item.width < 24));
+      assert.deepEqual(small, [], `links under 24 px: ${JSON.stringify(small)}`);
+    });
+
+    await scenario("T1", "operations, integrations and the technical guide use one Vietnamese name in the menu, breadcrumb and title", async ({ page }) => {
+      for (const [route, name] of [["/health", "Vận hành"], ["/integrations", "Tích hợp"], ["/dev", "Hướng dẫn kỹ thuật"]]) {
+        await go(page, withStore(route));
+        await expectVisible(page.getByRole("heading", { level: 4 }).first(), `${route} title`);
+        const seen = await page.evaluate(() => ({
+          menu: (document.querySelector(".ant-menu-item-selected")?.textContent || "").trim(),
+          crumb: (document.querySelector(".ant-breadcrumb li:last-child")?.textContent || "").trim(),
+          title: (document.querySelector("h4")?.textContent || "").trim(),
+          body: document.body.innerText,
+        }));
+        assert.deepEqual([seen.menu, seen.crumb, seen.title], [name, name, name], `${route}: menu / breadcrumb / title`);
+        assert.ok(!/Dev guide/.test(seen.body), `${route} still shows the English label "Dev guide"`);
+      }
+      await go(page, withStore("/guide"));
+      await expectVisible(page.getByRole("heading", { level: 4 }).first(), "guide title");
+      assert.ok(!/Dev guide/.test(await page.locator("body").innerText()), "the guide still shows the English label \"Dev guide\"");
     });
 
     console.log("\n--- authentication ---");
