@@ -2441,7 +2441,7 @@
 
   function schemaIdentifier(value, maxLength = 100) {
     const normalized = String(value || '')
-      .replace(/[ -]/g, '')
+      .replace(/[\u0000-\u001f\u007f]/g, '')
       .replace(/\s+/g, ' ')
       .trim();
     if (!normalized || normalized.length > maxLength) return '';

@@ -226,6 +226,17 @@ async function main() {
       }
       assert.ok(source.includes("customElements.define('f1genz-curated-slider'"), "curated slider element is registered");
     });
+    await check("B9", "runtime JS and CSS hold no raw control bytes, so git, editors and the theme pipeline keep reading them as text", async () => {
+      for (const file of [RUNTIME_JS, RUNTIME_CSS]) {
+        const found = [];
+        let line = 1;
+        for (const byte of fs.readFileSync(file)) {
+          if (byte === 0x0a) line += 1;
+          else if ((byte < 0x20 && byte !== 0x09 && byte !== 0x0d) || byte === 0x7f) found.push(`line ${line} byte 0x${byte.toString(16).padStart(2, "0")}`);
+        }
+        assert.deepEqual(found, [], `${path.basename(file)} holds raw control bytes, write them as \\u escapes: ${found.join(", ")}`);
+      }
+    });
     await check("B8", "primary buttons switch to dark text when the accent colour fails AA with white", async () => {
       const api = publicApi();
       const first = await open(api);
@@ -592,6 +603,28 @@ async function main() {
         const injected = await page.evaluate(() => !!document.querySelector("#schema b"));
         assert.equal(injected, false, "review text cannot break out of the script element");
         assert.match(ld.offers.url, /^https?:\/\//, "offer url is absolute");
+      } finally {
+        await context.close();
+      }
+    });
+    await check("L8", "NUL, DEL and other control characters in schema identifier attributes never reach the JSON-LD", async () => {
+      const api = publicApi();
+      const { context, page } = await open(api, { ready: null });
+      try {
+        await page.waitForSelector("#schema script[type='application/ld+json']", { state: "attached", timeout: 8000 });
+        const ld = await page.evaluate(() => {
+          const element = document.getElementById("schema");
+          element.setAttribute("sku", "E2E\u0000-\u001f\u007f001");
+          element.setAttribute("mpn", "MP\u007fN\u0000 1");
+          element.setAttribute("brand", "Brand\u0000\u007f X");
+          element.setAttribute("description", "Mo\u001fta\u0000");
+          element.renderSchema([], {});
+          return JSON.parse(element.querySelector("script[type='application/ld+json']").textContent);
+        });
+        assert.equal(ld.sku, "E2E-001");
+        assert.equal(ld.mpn, "MPN 1");
+        assert.equal(ld.brand.name, "Brand X");
+        assert.equal(ld.description, "Mota");
       } finally {
         await context.close();
       }
