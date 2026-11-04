@@ -833,7 +833,7 @@ const ReviewsPage = () => {
           </Button>
         ) : null}
 
-        <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+        <div style={{ flex: isMobile ? "0 0 auto" : "1 1 220px", minWidth: 0 }}>
           <ProductSearch
             products={searchableProducts}
             statsMap={statsMap}
