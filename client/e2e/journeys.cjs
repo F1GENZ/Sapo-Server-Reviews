@@ -1124,6 +1124,19 @@ async function main() {
       }
     });
 
+    await scenario("S12", "at 375px the product filter on reviews and Q&A is as tall as its input, not a 220px block", { viewport: { width: 375, height: 812 } }, async ({ page }) => {
+      for (const route of ["/reviews", "/qna"]) {
+        await go(page, withStore(route));
+        const input = page.getByPlaceholder("Lọc theo sản phẩm…");
+        await expectVisible(input, `${route} product filter input`);
+        const heights = await input.evaluate((node) => {
+          const field = node.closest(".ant-input-affix-wrapper");
+          return { field: Math.round(field.getBoundingClientRect().height), wrapper: Math.round(field.parentElement.parentElement.getBoundingClientRect().height) };
+        });
+        assert.ok(heights.wrapper <= heights.field + 8, `${route}: the filter wrapper is ${heights.wrapper}px tall around a ${heights.field}px input`);
+      }
+    });
+
     console.log("\n--- install guide ---");
     const SCHEMA_SNIPPET_FILE = path.join(REPO_ROOT, "storefront", "theme", "f1genz-product-schema.bwt");
     const expandAllPanels = async (page) => {
