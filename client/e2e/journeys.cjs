@@ -1124,7 +1124,7 @@ async function main() {
       }
     });
 
-    await scenario("S12", "at 375px the product filter on reviews and Q&A is as tall as its input, not a 220px block", { viewport: { width: 375, height: 812 } }, async ({ page }) => {
+    await scenario("S13", "at 375px the product filter on reviews and Q&A is as tall as its input, not a 220px block", { viewport: { width: 375, height: 812 } }, async ({ page }) => {
       for (const route of ["/reviews", "/qna"]) {
         await go(page, withStore(route));
         const input = page.getByPlaceholder("Lọc theo sản phẩm…");
