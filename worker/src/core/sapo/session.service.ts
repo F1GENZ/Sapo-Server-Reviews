@@ -190,6 +190,11 @@ export class SessionService {
         return part.slice(encodedName.length);
       }
     }
+    const rawAuth = typeof req.headers.authorization === 'string' ? req.headers.authorization.trim() : '';
+    if (rawAuth.toLowerCase().startsWith('bearer ')) {
+      const bearer = rawAuth.slice(7).trim();
+      if (bearer) return bearer;
+    }
     return null;
   }
 }

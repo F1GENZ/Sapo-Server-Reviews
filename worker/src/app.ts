@@ -50,7 +50,7 @@ import type { PrismaService } from './core/database/prisma.service';
 import type { RedisService } from './core/redis/redis.service';
 import type { PrismaSqliteService } from './db/prisma-sqlite';
 import type { SqliteRedisService } from './db/sqlite-redis';
-import { bumpStoreEdgeCache } from './edge-cache';
+import { bumpStoreEdgeCache, normalizePublicStoreDomain } from './edge-cache';
 import { buildAppEnv, type WorkerEnv } from './env';
 import { WorkerMediaService } from './media/worker-media.service';
 
@@ -135,7 +135,24 @@ const buildExpressAdapters = async (
   url.searchParams.forEach((v, k) => {
     queryObj[k] = v;
   });
-
+  if (url.pathname.startsWith('/api/public/') || url.pathname.startsWith('/api/oauth/')) {
+    if (!headersObj['x-store-domain']) {
+      const headerAlias =
+        headersObj['x-shop-domain'] ||
+        headersObj['x-sapo-shop-domain'] ||
+        headersObj['x-store'] ||
+        headersObj['x-shop'];
+      if (headerAlias) headersObj['x-store-domain'] = headerAlias;
+    }
+    if (!queryObj.storeDomain) {
+      const queryAlias =
+        queryObj.shopDomain ||
+        queryObj.store ||
+        queryObj.shop ||
+        queryObj.domain;
+      if (queryAlias) queryObj.storeDomain = queryAlias;
+    }
+  }
   let body: unknown = {};
   let rawBody: Buffer | undefined;
   if (options.parseBody && c.req.method !== 'GET' && c.req.method !== 'HEAD') {
@@ -423,7 +440,7 @@ export const createApp = (
     if (c.req.method === 'OPTIONS') {
       const headers = new Headers({
         'Access-Control-Allow-Methods': 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Store-Domain,X-Upload-Token,X-Sapo-Hmac-Sha256,X-Sapo-Topic,X-Sapo-Shop-Domain',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Store-Domain,X-Shop-Domain,X-Upload-Token,X-Sapo-Hmac-Sha256,X-Sapo-Topic,X-Sapo-Shop-Domain',
         'Access-Control-Max-Age': '600',
         'X-Content-Type-Options': 'nosniff',
       });
@@ -697,7 +714,7 @@ export const createApp = (
   app.post('/api/public/reviews/:productId', async (c) => {
     const { req, res } = await buildExpressAdapters(c, { parseBody: true });
     const productId = numericIdPipe.transform(c.req.param('productId'));
-    const storeDomain = req.headers['x-store-domain'] || req.query.storeDomain || '';
+    const storeDomain = normalizePublicStoreDomain(req.headers['x-store-domain'] || req.query.storeDomain || '');
     const out = await publicReviewController.submitReview(
       productId,
       req as never,
@@ -739,7 +756,7 @@ export const createApp = (
   app.post('/api/public/qna/:productId', async (c) => {
     const { req, res } = await buildExpressAdapters(c, { parseBody: true });
     const productId = numericIdPipe.transform(c.req.param('productId'));
-    const storeDomain = req.headers['x-store-domain'] || req.query.storeDomain || '';
+    const storeDomain = normalizePublicStoreDomain(req.headers['x-store-domain'] || req.query.storeDomain || '');
     const out = await publicQnaController.submitQuestion(
       productId,
       req as never,
@@ -751,13 +768,15 @@ export const createApp = (
     return finalizeResponse(res, out, 201);
   });
 
-  // Public Media Routes
-  app.post('/api/public/media/upload-ticket', async (c) => {
+  // Public Media Routes (both /ticket used by storefront widget and /upload-ticket alias)
+  const handlePublicMediaTicket = async (c: Context, defaultStatus: number): Promise<Response> => {
     const { req, res } = await buildExpressAdapters(c, { parseBody: true });
     await requirePublicMediaAuth(req, res);
     const out = await publicMediaController.createTicket(req as never, req.body as never);
-    return finalizeResponse(res, out, 201);
-  });
+    return finalizeResponse(res, out, defaultStatus);
+  };
+  app.post('/api/public/media/ticket', (c) => handlePublicMediaTicket(c, 200));
+  app.post('/api/public/media/upload-ticket', (c) => handlePublicMediaTicket(c, 201));
 
   app.post('/api/public/media/upload', async (c) => {
     const { req, res } = await buildExpressAdapters(c);
@@ -1186,6 +1205,12 @@ export const createApp = (
   });
 
   // Admin Outbound Webhooks Routes
+  app.get('/api/admin/outbound-webhooks/events', async (c) => {
+    const { req, res } = await buildExpressAdapters(c);
+    await requireShopAuth(req, res);
+    const out = outboundWebhookController.listEvents();
+    return finalizeResponse(res, out);
+  });
   app.get('/api/admin/outbound-webhooks', async (c) => {
     const { req, res } = await buildExpressAdapters(c);
     await requireShopAuth(req, res);

@@ -53,11 +53,50 @@ export const getStoreEdgeCacheEpoch = async (storeDomain: string): Promise<strin
   }
 };
 
+export const PUBLIC_STORE_DOMAIN_HEADERS = [
+  'x-store-domain',
+  'x-shop-domain',
+  'x-sapo-shop-domain',
+  'x-store',
+  'x-shop',
+] as const;
+
+export const PUBLIC_STORE_DOMAIN_QUERY_PARAMS = [
+  'storeDomain',
+  'shopDomain',
+  'store',
+  'shop',
+  'domain',
+] as const;
+
+export const normalizePublicStoreDomain = (raw: unknown): string => {
+  if (typeof raw !== 'string') return '';
+  let cleaned =
+    raw
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .split('/')[0]
+      ?.split('?')[0]
+      ?.trim()
+      .replace(/\.$/, '') ?? '';
+  if (cleaned && !cleaned.includes('.') && /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(cleaned)) {
+    cleaned = `${cleaned}.mysapo.net`;
+  }
+  return cleaned;
+};
+
 export const extractPublicStoreDomain = (request: Request): string => {
   const url = new URL(request.url);
-  const fromHeader = request.headers.get('x-store-domain');
-  const fromQuery = url.searchParams.get('storeDomain');
-  return String(fromHeader || fromQuery || '').trim().toLowerCase();
+  for (const h of PUBLIC_STORE_DOMAIN_HEADERS) {
+    const fromHeader = normalizePublicStoreDomain(request.headers.get(h));
+    if (fromHeader) return fromHeader;
+  }
+  for (const q of PUBLIC_STORE_DOMAIN_QUERY_PARAMS) {
+    const fromQuery = normalizePublicStoreDomain(url.searchParams.get(q));
+    if (fromQuery) return fromQuery;
+  }
+  return '';
 };
 
 export const isCacheableStorefrontGet = (request: Request): boolean => {

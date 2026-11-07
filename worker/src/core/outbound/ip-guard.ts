@@ -133,11 +133,33 @@ export const isPublicAddress = (address: string): boolean => {
   return false;
 };
 
-export const defaultAddressResolver: AddressResolver = async (hostname) => {
-  const records = await lookup(hostname, { all: true, verbatim: true });
-  return records.map((record) => record.address);
+const DOH_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
+const DOH_TIMEOUT_MS = 3000;
+
+const resolveViaDoh = async (hostname: string, type: 'A' | 'AAAA'): Promise<string[]> => {
+  const wanted = type === 'A' ? 1 : 28;
+  const res = await fetch(`${DOH_ENDPOINT}?name=${encodeURIComponent(hostname)}&type=${type}`, {
+    headers: { accept: 'application/dns-json' },
+    redirect: 'manual',
+    signal: AbortSignal.timeout(DOH_TIMEOUT_MS),
+  });
+  if (!res.ok) return [];
+  const body = (await res.json()) as { Answer?: Array<{ type?: number; data?: string }> };
+  return (body.Answer ?? [])
+    .filter((a) => a.type === wanted && typeof a.data === 'string')
+    .map((a) => a.data as string);
 };
 
+export const defaultAddressResolver: AddressResolver = async (hostname) => {
+  try {
+    const records = await lookup(hostname, { all: true, verbatim: true });
+    if (records.length > 0) return records.map((record) => record.address);
+  } catch {
+    // Fallback to Cloudflare DoH in Cloudflare Workers runtime where OS dns.lookup is unavailable.
+  }
+  const [v4, v6] = await Promise.all([resolveViaDoh(hostname, 'A'), resolveViaDoh(hostname, 'AAAA')]);
+  return [...v4, ...v6];
+};
 export const assertOutboundUrlSafe = async (
   rawUrl: string,
   resolve: AddressResolver = defaultAddressResolver,

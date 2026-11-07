@@ -24,6 +24,7 @@ import type { AppEnv } from '../config/env.schema';
 import { IngressRateLimitService } from '../common/security/ingress-rate-limit.service';
 import { clientFingerprint } from '../common/security/client-fingerprint';
 import { STORE_DOMAIN_RE, STRICT_EMAIL_RE, isValidPhone } from '../common/security/public-limits';
+import { normalizeStoreDomainCandidate } from '../common/security/public-rate-limit';
 import { sanitizePublicMedia, type PublicIdentity } from './public-review-input';
 import { normalizePhone } from '../purchase/purchase-store.service';
 import { buildSliderPayload, resolveSliderSettings } from './slider-payload';
@@ -102,7 +103,7 @@ export class PublicReviewController {
   }
 
   private extractStoreDomain(header?: string, query?: string): string {
-    const domain = (header || query || '').trim().toLowerCase();
+    const domain = normalizeStoreDomainCandidate(header || query || '');
     if (!domain) throw new BadRequestException('Missing store domain');
     if (!STORE_DOMAIN_RE.test(domain)) {
       throw new BadRequestException('Invalid store domain');
