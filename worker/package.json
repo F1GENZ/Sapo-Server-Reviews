@@ -1,13 +1,25 @@
 {
-  "name": "f1genz-sapo-reviews-media",
+  "name": "f1genz-sapo-reviews-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --maxWorkers=1 --testTimeout=60000"
+  },
+  "dependencies": {
+    "cookie": "^0.7.2",
+    "hono": "^4.13.13",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
-    "wrangler": "^3.0.0"
+    "@cloudflare/vitest-plugin": "^1.4.2",
+    "@types/cookie": "^0.6.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.2",
+    "vitest": "~4.1.11",
+    "wrangler": "^4.151.0"
   }
 }

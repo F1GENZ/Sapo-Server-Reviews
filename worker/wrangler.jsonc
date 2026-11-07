@@ -1,0 +1,78 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "f1genz-sapo-reviews-api",
+  "account_id": "dc25380a46ad0853b9b0d98ce7a74270",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "upload_source_maps": true,
+  "observability": { "enabled": true },
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "api-sapo-reviews.f1genz.dev/*", "zone_name": "f1genz.dev" },
+    { "pattern": "reviews-sapo.f1genz.dev/api/*", "zone_name": "f1genz.dev" },
+    { "pattern": "reviews-sapo.f1genz.dev/storefront/*", "zone_name": "f1genz.dev" }
+  ],
+  "alias": {
+    "@nestjs/common": "./src/shims/nestjs-common.ts",
+    "@nestjs/core": "./src/shims/nestjs-common.ts",
+    "@nestjs/platform-express": "./src/shims/nestjs-common.ts",
+    "class-validator": "./src/shims/nestjs-common.ts",
+    "class-transformer": "./src/shims/nestjs-common.ts",
+    "@prisma/client": "./src/shims/prisma-client.ts",
+    "ioredis": "./src/shims/ioredis.ts",
+    "express": "./src/shims/express.ts"
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "STORE_DO", "class_name": "StoreDO" },
+      { "name": "STORE", "class_name": "StoreDO" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["StoreDO"] }
+  ],
+  "r2_buckets": [
+    { "binding": "MEDIA_BUCKET", "bucket_name": "f1genz-sapo-reviews-media" }
+  ],
+  "ratelimits": [
+    {
+      "name": "PUBLIC_SAPO_RATE_LIMITER",
+      "namespace_id": "1010",
+      "simple": { "limit": 180, "period": 60 }
+    }
+  ],
+  "vars": {
+    "NODE_ENV": "production",
+    "PORT": "3021",
+    "FRONTEND_URL": "https://reviews-sapo.f1genz.dev",
+    "API_BASE_URL": "https://api-sapo-reviews.f1genz.dev",
+    "CORS_ALLOWED_ORIGINS": "https://reviews-sapo.f1genz.dev,https://f1genz-sapo-reviews-admin.pages.dev",
+    "REQUEST_BODY_LIMIT": "1mb",
+    "WEBHOOK_BODY_LIMIT": "256kb",
+    "SAPO_SCOPE": "read_products,write_products,read_orders,write_content",
+    "SAPO_LOGIN_CALLBACK_URL": "https://api-sapo-reviews.f1genz.dev/api/oauth/install/callback",
+    "SAPO_INSTALL_CALLBACK_URL": "https://api-sapo-reviews.f1genz.dev/api/oauth/install/login/callback",
+    "SAPO_USE_CONNECT_TOKEN": "false",
+    "APP_SESSION_COOKIE_NAME": "f1genz_review_sapo_session",
+    "APP_SESSION_TTL_SECONDS": "43200",
+    "SESSION_HANDOFF_TTL_SECONDS": "120",
+    "REDIS_KEY_PREFIX": "sapo-review",
+    "R2_WORKER_URL": "https://f1genz-sapo-reviews-media.icy-wind-c674.workers.dev",
+    "R2_PUBLIC_DOMAIN": "images-sapo.f1genz.dev",
+    "AUTH_RATE_LIMIT_WINDOW_SECONDS": "60",
+    "AUTH_RATE_LIMIT_MAX": "60",
+    "SESSION_EXCHANGE_RATE_LIMIT_MAX": "60",
+    "PUBLIC_RATE_LIMIT_WINDOW_SECONDS": "60",
+    "PUBLIC_RATE_LIMIT_MAX": "120",
+    "WEBHOOK_RATE_LIMIT_WINDOW_SECONDS": "60",
+    "WEBHOOK_RATE_LIMIT_MAX": "300",
+    "WEBHOOK_AUTO_SUBSCRIBE": "true",
+    "AI_MODEL": "gemini-2.5-flash"
+  }
+}

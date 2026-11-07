@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "WebWorker"],
+    "types": ["node", "./src/worker-configuration.d.ts", "@cloudflare/vitest-plugin/types"],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@nestjs/common": ["./src/shims/nestjs-common.ts"],
+      "@nestjs/core": ["./src/shims/nestjs-common.ts"],
+      "@nestjs/platform-express": ["./src/shims/nestjs-common.ts"],
+      "class-validator": ["./src/shims/nestjs-common.ts"],
+      "class-transformer": ["./src/shims/nestjs-common.ts"],
+      "@prisma/client": ["./src/shims/prisma-client.ts"],
+      "ioredis": ["./src/shims/ioredis.ts"],
+      "express": ["./src/shims/express.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}
