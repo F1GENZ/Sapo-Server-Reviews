@@ -1,5 +1,5 @@
 // @ts-expect-error the Cloudflare Worker is plain JavaScript and ships no declaration file
-import workerModule from '../../worker/src/index.js';
+import workerModule from '../../worker/media-worker/src/index.js';
 
 export type WorkerEnv = Record<string, unknown>;
 

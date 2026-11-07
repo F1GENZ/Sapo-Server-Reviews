@@ -67,11 +67,35 @@ jobs:
     with:
       skip-verify: true
 
-  deploy:
-    name: Deploy API via SSH
+  verify-worker:
+    name: Worker typecheck and test
     runs-on: ubuntu-latest
-    needs: [verify-server, verify-client, e2e]
-    if: github.ref == 'refs/heads/master'
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout latest commit
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install dependencies
+        working-directory: worker
+        run: npm ci
+
+      - name: Typecheck and test
+        working-directory: worker
+        run: npm run typecheck && npm test
+
+  deploy:
+    name: Deploy API via SSH (Retired - Cloudflare Worker Cutover)
+    runs-on: ubuntu-latest
+    needs: [verify-server, verify-client, verify-worker, e2e]
+    if: false
     timeout-minutes: 20
 
     steps:
