@@ -4,7 +4,7 @@
 
 - Node.js 20.6+ (`engines`; CI runs Node 22; the VPS needs 20.6+ because PM2 starts Node with `--env-file`)
 - PostgreSQL (local or Supabase)
-- Redis (local or Upstash). Without `REDIS_HOST` the server falls back to in-process memory for state, which is only suitable for tests.
+- Redis (local or Upstash) — optional. Without `REDIS_HOST` the server falls back to in-process memory for state, which is usable in production for a single instance (PM2 fork mode); state is lost on restart and is not shared, so scaling beyond one instance requires setting a Redis host again.
 - Sapo Partner account + app registered at `developers.sapo.vn`
 - Sapo dev store (sandbox) — `your-store.mysapo.net`
 
