@@ -56,7 +56,7 @@ Non-secret production values (`docs/env-contract.md` lists every key):
 | `API_BASE_URL` | `https://api-sapo-reviews.f1genz.dev` |
 | `FRONTEND_URL`, `CORS_ALLOWED_ORIGINS` | `https://reviews-sapo.f1genz.dev` |
 | `TRUST_PROXY` | `loopback` plus the 22 ranges Cloudflare publishes at `https://www.cloudflare.com/ips-v4` and `/ips-v6` (15 IPv4, 7 IPv6). cloudflared connects from loopback and every Cloudflare edge, Pages Function egress included, is a trusted hop, so `req.ip` is the visitor. Compare with the published lists when Cloudflare announces a change: an unlisted edge range would put all its visitors into one rate-limit bucket |
-| `REDIS_HOST`, `REDIS_PORT`, `REDIS_KEY_PREFIX` | `127.0.0.1`, `6380`, `sapo-reviews` |
+| `REDIS_HOST`, `REDIS_PORT`, `REDIS_KEY_PREFIX` | `REDIS_HOST` unset: the server keeps state in memory — single PM2 fork instance, state is lost on restart (contract in `docs/env-contract.md`). The local Redis at `127.0.0.1:6380` was removed; `REDIS_PORT` and `REDIS_KEY_PREFIX` (`6380`, `sapo-reviews`) only take effect again if a Redis host is set |
 | `R2_WORKER_URL`, `R2_PUBLIC_DOMAIN` | `https://f1genz-sapo-reviews-media.icy-wind-c674.workers.dev`, `images-sapo.f1genz.dev` |
 | `SAPO_SCOPE`, `SAPO_INSTALL_CALLBACK_URL`, `SAPO_LOGIN_CALLBACK_URL` | as in the Partner section |
 | `SAPO_API_MAX_CONCURRENT`, `REQUEST_BODY_LIMIT`, `WEBHOOK_BODY_LIMIT` | `4`, `1mb`, `256kb` |
