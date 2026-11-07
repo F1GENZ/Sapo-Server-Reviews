@@ -1,8 +1,28 @@
 import { randomUUID } from 'node:crypto';
-import type { RedisLock } from '../core/redis/redis.service';
+import type { RedisLock, RedisService } from '../core/redis/redis.service';
 import type { SqlStorageLike } from './prisma-sqlite';
 
-export class SqliteRedisService {
+export type RedisServiceContract = Pick<
+  RedisService,
+  | 'isConfigured'
+  | 'keyPrefix'
+  | 'namespaced'
+  | 'onModuleDestroy'
+  | 'get'
+  | 'set'
+  | 'del'
+  | 'delMany'
+  | 'getDel'
+  | 'setNx'
+  | 'acquireLock'
+  | 'releaseLock'
+  | 'incr'
+  | 'ttl'
+  | 'scanKeys'
+  | 'ping'
+>;
+
+export class SqliteRedisService implements RedisServiceContract {
   readonly isMemoryMode = false;
   readonly isConfigured = true;
   readonly keyPrefix: string;

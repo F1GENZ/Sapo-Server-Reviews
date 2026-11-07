@@ -314,17 +314,15 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     }
   });
 
-  it('supports all store domain query & header aliases (storeDomain, shopDomain, store, shop, domain, bare subdomain) across /api/public/*', async () => {
+  it('supports all store domain query & header aliases (storeDomain, shopDomain, store, shop, domain) across /api/public/*', async () => {
     const aliases = [
       `storeDomain=${STORE_DOMAIN}`,
       `shopDomain=${STORE_DOMAIN}`,
       `store=${STORE_DOMAIN}`,
       `shop=${STORE_DOMAIN}`,
       `domain=${STORE_DOMAIN}`,
-      `shop=f1genz-babymart`,
       `shop=${encodeURIComponent(`https://${STORE_DOMAIN}/`)}`,
     ];
-
     for (const query of aliases) {
       const cfgRes1 = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/config/widget?${query}`);
       expect(cfgRes1.status, query).toBe(200);
@@ -350,9 +348,11 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     expect(missingRes.status).toBe(400);
     expect(await missingRes.json()).toMatchObject({ message: 'Missing store domain', statusCode: 400 });
 
-    const invalidRes = await SELF.fetch('https://api-sapo-reviews.f1genz.dev/api/public/reviews/config/widget?shop=bad%20domain!');
-    expect(invalidRes.status).toBe(400);
-    expect(await invalidRes.json()).toMatchObject({ message: 'Invalid store domain', statusCode: 400 });
+    for (const bad of ['bad%20domain!', 'invalid-no-tld']) {
+      const invalidRes = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/config/widget?shop=${bad}`);
+      expect(invalidRes.status, bad).toBe(400);
+      expect(await invalidRes.json()).toMatchObject({ message: 'Invalid store domain', statusCode: 400 });
+    }
   });
 
   it('serves Storefront Reviews (list, summary, slider, batch summaries, purchase eligibility, submit review) and invalidates Edge Cache', async () => {
@@ -918,6 +918,7 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
       method: 'POST',
       headers: {
         Authorization: `Bearer ${exchangeBody.sessionToken}`,
+        Cookie: `${appEnv.SESSION_COOKIE_NAME}=${encodeURIComponent(exchangeBody.sessionToken)}`,
         Origin: appEnv.FRONTEND_URL,
         'Content-Type': 'application/json',
       },

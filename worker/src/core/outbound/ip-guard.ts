@@ -1,6 +1,4 @@
-import { lookup } from 'dns/promises';
 import { BadRequestException } from '@nestjs/common';
-
 export type AddressResolver = (hostname: string) => Promise<string[]>;
 
 const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
@@ -143,7 +141,7 @@ const resolveViaDoh = async (hostname: string, type: 'A' | 'AAAA'): Promise<stri
     redirect: 'manual',
     signal: AbortSignal.timeout(DOH_TIMEOUT_MS),
   });
-  if (!res.ok) return [];
+  if (!res.ok) throw new Error(`DoH answered HTTP ${res.status}`);
   const body = (await res.json()) as { Answer?: Array<{ type?: number; data?: string }> };
   return (body.Answer ?? [])
     .filter((a) => a.type === wanted && typeof a.data === 'string')
@@ -151,12 +149,6 @@ const resolveViaDoh = async (hostname: string, type: 'A' | 'AAAA'): Promise<stri
 };
 
 export const defaultAddressResolver: AddressResolver = async (hostname) => {
-  try {
-    const records = await lookup(hostname, { all: true, verbatim: true });
-    if (records.length > 0) return records.map((record) => record.address);
-  } catch {
-    // Fallback to Cloudflare DoH in Cloudflare Workers runtime where OS dns.lookup is unavailable.
-  }
   const [v4, v6] = await Promise.all([resolveViaDoh(hostname, 'A'), resolveViaDoh(hostname, 'AAAA')]);
   return [...v4, ...v6];
 };

@@ -15,17 +15,14 @@ const firstString = (value: unknown): string => {
 export const normalizeStoreDomainCandidate = (raw: unknown): string => {
   const text = firstString(raw);
   if (!text) return '';
-  let cleaned =
+  return (
     text
       .replace(/^https?:\/\//, '')
       .split('/')[0]
       ?.split('?')[0]
       ?.trim()
-      .replace(/\.$/, '') ?? '';
-  if (cleaned && !cleaned.includes('.') && /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(cleaned)) {
-    cleaned = `${cleaned}.mysapo.net`;
-  }
-  return cleaned;
+      .replace(/\.$/, '') ?? ''
+  );
 };
 
 export const resolveStoreScope = (req: Request): string | null => {

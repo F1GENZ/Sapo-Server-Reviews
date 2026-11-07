@@ -1,3 +1,5 @@
+import { normalizeStoreDomainCandidate } from './core/common/security/public-rate-limit';
+
 const EDGE_CACHE_ORIGIN = 'https://edge-cache.f1genz.internal';
 const PUBLIC_CACHE_TTL_SECONDS = 60;
 const PUBLIC_CACHE_SWR_SECONDS = 300;
@@ -69,22 +71,7 @@ export const PUBLIC_STORE_DOMAIN_QUERY_PARAMS = [
   'domain',
 ] as const;
 
-export const normalizePublicStoreDomain = (raw: unknown): string => {
-  if (typeof raw !== 'string') return '';
-  let cleaned =
-    raw
-      .trim()
-      .toLowerCase()
-      .replace(/^https?:\/\//, '')
-      .split('/')[0]
-      ?.split('?')[0]
-      ?.trim()
-      .replace(/\.$/, '') ?? '';
-  if (cleaned && !cleaned.includes('.') && /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(cleaned)) {
-    cleaned = `${cleaned}.mysapo.net`;
-  }
-  return cleaned;
-};
+export const normalizePublicStoreDomain = normalizeStoreDomainCandidate;
 
 export const extractPublicStoreDomain = (request: Request): string => {
   const url = new URL(request.url);
