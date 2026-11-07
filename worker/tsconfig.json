@@ -16,6 +16,7 @@
     "baseUrl": ".",
     "paths": {
       "@nestjs/common": ["./src/shims/nestjs-common.ts"],
+      "@nestjs/common/*": ["./src/shims/nestjs-common.ts"],
       "@nestjs/core": ["./src/shims/nestjs-common.ts"],
       "@nestjs/platform-express": ["./src/shims/nestjs-common.ts"],
       "class-validator": ["./src/shims/nestjs-common.ts"],

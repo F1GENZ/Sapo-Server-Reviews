@@ -1,5 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { BadGatewayException, BadRequestException, UnauthorizedException } from '@nestjs/common/exceptions';
+import { BadGatewayException, BadRequestException, Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env.schema';
 import type {
