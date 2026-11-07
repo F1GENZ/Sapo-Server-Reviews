@@ -7,6 +7,7 @@ import { LifecycleLockService } from './lifecycle-lock.service';
 import { SapoApiService } from './sapo-api.service';
 import { OAuthStateService } from './oauth-state.service';
 import { SessionService } from './session.service';
+import { normalizeStoreDomainCandidate } from '../common/security/public-rate-limit';
 import { ShopDomainService, normalizeShopDomain } from './shop-domain.service';
 import { TokenEncryptionService } from './token-encryption.service';
 import { StorefrontService } from '../storefront/storefront.service';
@@ -55,7 +56,7 @@ export class SapoService {
     });
     const baseDomain = input.storeDomain;
     if (!baseDomain) throw new BadRequestException('storeDomain is required to build authorize URL');
-    const shopHost = normalizeShopDomain(baseDomain);
+    const shopHost = normalizeStoreDomainCandidate(normalizeShopDomain(baseDomain));
     if (!SAPO_SHOP_DOMAIN_RE.test(shopHost)) {
       throw new BadRequestException('storeDomain must be a valid Sapo shop domain (*.mysapo.net)');
     }
@@ -64,14 +65,16 @@ export class SapoService {
 
   async buildLoginUrl(input: { storeDomain?: string; redirectTo?: string } = {}): Promise<string> {
     if (!input.storeDomain) throw new BadRequestException('storeDomain is required');
-    const { state } = await this.oauthState.create('login', input);
-    return this.buildAuthorizeUrl({ flow: 'login', state, storeDomain: input.storeDomain });
+    const storeDomain = normalizeStoreDomainCandidate(normalizeShopDomain(input.storeDomain)) || input.storeDomain;
+    const { state } = await this.oauthState.create('login', { ...input, storeDomain });
+    return this.buildAuthorizeUrl({ flow: 'login', state, storeDomain });
   }
 
   async buildInstallUrl(input: { storeDomain?: string; redirectTo?: string } = {}): Promise<string> {
     if (!input.storeDomain) throw new BadRequestException('storeDomain is required');
-    const { state } = await this.oauthState.create('install', input);
-    return this.buildAuthorizeUrl({ flow: 'install', state, storeDomain: input.storeDomain });
+    const storeDomain = normalizeStoreDomainCandidate(normalizeShopDomain(input.storeDomain)) || input.storeDomain;
+    const { state } = await this.oauthState.create('install', { ...input, storeDomain });
+    return this.buildAuthorizeUrl({ flow: 'install', state, storeDomain });
   }
 
   async startLogin(input: { storeDomain?: string; redirectTo?: string } = {}): Promise<AuthStartResponse> {

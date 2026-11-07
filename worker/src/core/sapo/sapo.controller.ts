@@ -18,6 +18,7 @@ import type { AppEnv } from '../config/env.schema';
 import { IngressRateLimitService } from '../common/security/ingress-rate-limit.service';
 import { isTrustedUnsafeOrigin } from '../common/security/origin-policy';
 import { clientFingerprint } from '../common/security/client-fingerprint';
+import { normalizeStoreDomainCandidate } from '../common/security/public-rate-limit';
 import { ShopAuthGuard } from '../common/guards/shop-auth.guard';
 import { SapoService, type AuthStartResponse, type HandoffResponse } from './sapo.service';
 import { HmacVerifierService } from './hmac-verifier.service';
@@ -80,7 +81,8 @@ export class SapoController {
     @Query('redirect') redirectTo?: string,
   ) {
     await this.assertAuthRate(req, 'oauth-login');
-    const result = await this.sapo.startLogin({ storeDomain: firstQuery(storeDomain), redirectTo: firstQuery(redirectTo) });
+    const normalizedStore = normalizeStoreDomainCandidate(firstQuery(storeDomain)) || undefined;
+    const result = await this.sapo.startLogin({ storeDomain: normalizedStore, redirectTo: firstQuery(redirectTo) });
     return wantsBrowserRedirect(req) ? result : result.url;
   }
 
@@ -91,7 +93,8 @@ export class SapoController {
     @Query('redirect') redirectTo?: string,
   ) {
     await this.assertAuthRate(req, 'oauth-login');
-    const result = await this.sapo.startLogin({ storeDomain: firstQuery(storeDomain), redirectTo: firstQuery(redirectTo) });
+    const normalizedStore = normalizeStoreDomainCandidate(firstQuery(storeDomain)) || undefined;
+    const result = await this.sapo.startLogin({ storeDomain: normalizedStore, redirectTo: firstQuery(redirectTo) });
     return { url: result.url, reason: result.reason };
   }
 
@@ -102,11 +105,12 @@ export class SapoController {
     const rawQuery = queryIndex >= 0 ? req.originalUrl.slice(queryIndex + 1) : '';
     const launchParams = new URLSearchParams(rawQuery);
     if (!launchParams.has('hmac')) {
-      return this.sapo.startLogin({ storeDomain: firstQuery(req.query.storeDomain), redirectTo: firstQuery(req.query.redirect) });
+      const normalizedStore = normalizeStoreDomainCandidate(firstQuery(req.query.storeDomain)) || undefined;
+      return this.sapo.startLogin({ storeDomain: normalizedStore, redirectTo: firstQuery(req.query.redirect) });
     }
 
     const params = this.hmacVerifier.verifyLaunchQuery(rawQuery);
-    const storeDomain = params.get('store') || undefined;
+    const storeDomain = normalizeStoreDomainCandidate(params.get('store')) || undefined;
     if (!storeDomain) throw new BadRequestException('Missing store in launch parameters');
     return this.sessions.createHandoff(storeDomain, '/dashboard');
   }
@@ -138,7 +142,7 @@ export class SapoController {
   @Get('/oauth/install/start')
   async installStart(@Req() req: Request, @Query('storeDomain') storeDomain?: string) {
     await this.assertAuthRate(req, 'oauth-install-start');
-    const target = firstQuery(storeDomain);
+    const target = normalizeStoreDomainCandidate(firstQuery(storeDomain));
     if (!target) throw new BadRequestException('storeDomain is required');
     return this.sapo.buildInstallUrl({ storeDomain: target });
   }
@@ -154,7 +158,7 @@ export class SapoController {
     await this.assertAuthRate(req, 'oauth-install');
     const authCode = firstQuery(code);
     if (!authCode) {
-      const storeDomain = firstQuery(store);
+      const storeDomain = normalizeStoreDomainCandidate(firstQuery(store));
       if (storeDomain) {
         const login = await this.sapo.buildLoginUrl({ storeDomain });
         return res.redirect(302, login);

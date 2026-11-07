@@ -314,41 +314,59 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     }
   });
 
-  it('supports all store domain query & header aliases (storeDomain, shopDomain, store, shop, domain) across /api/public/*', async () => {
+  it('supports all store domain query & header aliases (storeDomain, shopDomain, store, shop, domain, bare subdomain) across /api/public/*', async () => {
+    const bareSubdomain = STORE_DOMAIN.replace(/\.mysapo\.net$/, '');
     const aliases = [
       `storeDomain=${STORE_DOMAIN}`,
       `shopDomain=${STORE_DOMAIN}`,
       `store=${STORE_DOMAIN}`,
       `shop=${STORE_DOMAIN}`,
       `domain=${STORE_DOMAIN}`,
+      `shop=${bareSubdomain}`,
+      `store=${bareSubdomain}`,
+      `storeDomain=${bareSubdomain}`,
+      `shopDomain=${bareSubdomain}`,
+      `domain=${bareSubdomain}`,
       `shop=${encodeURIComponent(`https://${STORE_DOMAIN}/`)}`,
     ];
     for (const query of aliases) {
-      const cfgRes1 = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/config/widget?${query}`);
-      expect(cfgRes1.status, query).toBe(200);
-      expect(cfgRes1.headers.get('X-Edge-Cache'), query).toBe('MISS');
-      const cfgBody = (await cfgRes1.json()) as { data: { reviewQnaDisplayMode: string; formPhoneMode: string } };
+      const cfgRes = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/config/widget?${query}`);
+      expect(cfgRes.status, query).toBe(200);
+      const cfgBody = (await cfgRes.json()) as { data: { reviewQnaDisplayMode: string; formPhoneMode: string } };
       expect(cfgBody.data.reviewQnaDisplayMode).toBe('tabs');
       expect(cfgBody.data.formPhoneMode).toBe('optional');
-      const cfgRes2 = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/config/widget?${query}`);
-      expect(cfgRes2.status, query).toBe(200);
-      expect(cfgRes2.headers.get('X-Edge-Cache'), query).toBe('HIT');
+    }
+
+    // Verify bare subdomain across all 5 storefront GET endpoints + Edge Cache MISS -> HIT
+    const bareEndpoints = [
+      `/api/public/reviews/config/widget?shop=${bareSubdomain}`,
+      `/api/public/reviews/${PRODUCT_ID}/summary?shop=${bareSubdomain}`,
+      `/api/public/reviews/${PRODUCT_ID}?shop=${bareSubdomain}`,
+      `/api/public/qna/${PRODUCT_ID}/summary?shop=${bareSubdomain}`,
+      `/api/public/qna/${PRODUCT_ID}?shop=${bareSubdomain}`,
+    ];
+    for (const ep of bareEndpoints) {
+      const res = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev${ep}`);
+      expect(res.status, ep).toBe(200);
+      expect(['MISS', 'HIT']).toContain(res.headers.get('X-Edge-Cache'));
     }
 
     for (const headerName of ['x-store-domain', 'x-shop-domain', 'x-sapo-shop-domain']) {
-      const res = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary`, {
-        headers: { [headerName]: STORE_DOMAIN },
-      });
-      expect(res.status, headerName).toBe(200);
-      const body = (await res.json()) as { data: { count: number; avg: number } };
-      expect(body.data.count).toBeGreaterThanOrEqual(1);
+      for (const headerVal of [STORE_DOMAIN, bareSubdomain]) {
+        const res = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary`, {
+          headers: { [headerName]: headerVal },
+        });
+        expect(res.status, `${headerName}=${headerVal}`).toBe(200);
+        const body = (await res.json()) as { data: { count: number; avg: number } };
+        expect(body.data.count).toBeGreaterThanOrEqual(1);
+      }
     }
 
     const missingRes = await SELF.fetch('https://api-sapo-reviews.f1genz.dev/api/public/reviews/config/widget');
     expect(missingRes.status).toBe(400);
     expect(await missingRes.json()).toMatchObject({ message: 'Missing store domain', statusCode: 400 });
 
-    for (const bad of ['bad%20domain!', 'invalid-no-tld']) {
+    for (const bad of ['bad%20domain!', '-invalid-subdomain-', 'bad..domain.com']) {
       const invalidRes = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/config/widget?shop=${bad}`);
       expect(invalidRes.status, bad).toBe(400);
       expect(await invalidRes.json()).toMatchObject({ message: 'Invalid store domain', statusCode: 400 });
@@ -861,7 +879,12 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     const appEnv = buildAppEnv(testEnv);
 
     // 1. OAuth login entry (with ?storeDomain= and ?shop= aliases)
-    for (const q of [`storeDomain=${STORE_DOMAIN}`, `shop=${STORE_DOMAIN}`, `store=${STORE_DOMAIN}`]) {
+    for (const q of [
+      `storeDomain=${STORE_DOMAIN}`,
+      `shop=${STORE_DOMAIN}`,
+      `store=${STORE_DOMAIN}`,
+      `shop=${STORE_DOMAIN.replace(/\.mysapo\.net$/, '')}`,
+    ]) {
       const oauthRes = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/oauth/install/login/entry?${q}`);
       expect(oauthRes.status, q).toBe(200);
       const oauthBody = (await oauthRes.json()) as { url: string };

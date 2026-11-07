@@ -1,3 +1,4 @@
+import { STORE_DOMAIN_RE } from './core/common/security/public-limits';
 import { normalizeStoreDomainCandidate } from './core/common/security/public-rate-limit';
 
 const EDGE_CACHE_ORIGIN = 'https://edge-cache.f1genz.internal';
@@ -77,11 +78,11 @@ export const extractPublicStoreDomain = (request: Request): string => {
   const url = new URL(request.url);
   for (const h of PUBLIC_STORE_DOMAIN_HEADERS) {
     const fromHeader = normalizePublicStoreDomain(request.headers.get(h));
-    if (fromHeader) return fromHeader;
+    if (fromHeader && STORE_DOMAIN_RE.test(fromHeader)) return fromHeader;
   }
   for (const q of PUBLIC_STORE_DOMAIN_QUERY_PARAMS) {
     const fromQuery = normalizePublicStoreDomain(url.searchParams.get(q));
-    if (fromQuery) return fromQuery;
+    if (fromQuery && STORE_DOMAIN_RE.test(fromQuery)) return fromQuery;
   }
   return '';
 };

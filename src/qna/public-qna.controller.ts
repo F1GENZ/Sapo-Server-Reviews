@@ -22,6 +22,7 @@ import type { AppEnv } from '../config/env.schema';
 import { IngressRateLimitService } from '../common/security/ingress-rate-limit.service';
 import { clientFingerprint } from '../common/security/client-fingerprint';
 import { STORE_DOMAIN_RE, STRICT_EMAIL_RE } from '../common/security/public-limits';
+import { normalizeStoreDomainCandidate } from '../common/security/public-rate-limit';
 
 @Controller('api/public/qna')
 export class PublicQnaController {
@@ -42,7 +43,7 @@ export class PublicQnaController {
   }
 
   private extractStoreDomain(header?: string, query?: string): string {
-    const domain = (header || query || '').trim().toLowerCase();
+    const domain = normalizeStoreDomainCandidate(header || query || '');
     if (!domain) throw new BadRequestException('Missing store domain');
     if (!STORE_DOMAIN_RE.test(domain)) {
       throw new BadRequestException('Invalid store domain');

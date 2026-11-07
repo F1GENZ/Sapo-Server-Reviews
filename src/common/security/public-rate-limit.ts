@@ -12,9 +12,49 @@ const firstString = (value: unknown): string => {
   return typeof candidate === 'string' ? candidate.trim().toLowerCase() : '';
 };
 
+const BARE_SAPO_SUBDOMAIN_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+
+export const normalizeStoreDomainCandidate = (raw: unknown): string => {
+  const text = firstString(raw);
+  if (!text) return '';
+  const cleaned =
+    text
+      .replace(/^https?:\/\//, '')
+      .split('/')[0]
+      ?.split('?')[0]
+      ?.trim()
+      .replace(/\.$/, '') ?? '';
+  if (!cleaned) return '';
+  if (!cleaned.includes('.') && BARE_SAPO_SUBDOMAIN_RE.test(cleaned)) {
+    return `${cleaned}.mysapo.net`;
+  }
+  return cleaned;
+};
+
 // The store domain is unauthenticated: it may narrow a bucket, never replace the client bucket.
 export const resolveStoreScope = (req: Request): string | null => {
-  for (const candidate of [firstString(req.headers['x-store-domain']), firstString(req.query?.storeDomain)]) {
+  const headers = (req.headers ?? {}) as Record<string, unknown>;
+  const query = (req.query ?? {}) as Record<string, unknown>;
+  const body = req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>) : {};
+  const candidates = [
+    headers['x-store-domain'],
+    headers['x-shop-domain'],
+    headers['x-sapo-shop-domain'],
+    headers['x-store'],
+    headers['x-shop'],
+    query.storeDomain,
+    query.shopDomain,
+    query.store,
+    query.shop,
+    query.domain,
+    body.storeDomain,
+    body.shopDomain,
+    body.store,
+    body.shop,
+    body.domain,
+  ];
+  for (const raw of candidates) {
+    const candidate = normalizeStoreDomainCandidate(raw);
     if (candidate && STORE_DOMAIN_RE.test(candidate)) return candidate;
   }
   return null;

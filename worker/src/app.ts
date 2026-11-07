@@ -136,21 +136,26 @@ const buildExpressAdapters = async (
     queryObj[k] = v;
   });
   if (url.pathname.startsWith('/api/public/') || url.pathname.startsWith('/api/oauth/')) {
-    if (!headersObj['x-store-domain']) {
-      const headerAlias =
-        headersObj['x-shop-domain'] ||
-        headersObj['x-sapo-shop-domain'] ||
-        headersObj['x-store'] ||
-        headersObj['x-shop'];
-      if (headerAlias) headersObj['x-store-domain'] = headerAlias;
+    const headerAlias =
+      headersObj['x-store-domain'] ||
+      headersObj['x-shop-domain'] ||
+      headersObj['x-sapo-shop-domain'] ||
+      headersObj['x-store'] ||
+      headersObj['x-shop'];
+    if (headerAlias) {
+      headersObj['x-store-domain'] = normalizePublicStoreDomain(headerAlias);
     }
-    if (!queryObj.storeDomain) {
-      const queryAlias =
-        queryObj.shopDomain ||
-        queryObj.store ||
-        queryObj.shop ||
-        queryObj.domain;
-      if (queryAlias) queryObj.storeDomain = queryAlias;
+    const queryAlias =
+      queryObj.storeDomain ||
+      queryObj.shopDomain ||
+      queryObj.store ||
+      queryObj.shop ||
+      queryObj.domain;
+    if (queryAlias) {
+      queryObj.storeDomain = normalizePublicStoreDomain(queryAlias);
+    }
+    if (queryObj.store) {
+      queryObj.store = normalizePublicStoreDomain(queryObj.store);
     }
   }
   let body: unknown = {};
@@ -552,7 +557,12 @@ export const createApp = (
   app.post('/api/oauth/install/login', async (c) => {
     const { req, res } = await buildExpressAdapters(c, { parseBody: true });
     const b = (req.body ?? {}) as Record<string, string>;
-    const out = await sapoController.startLogin(req as never, b.storeDomain || req.query.storeDomain, b.redirect || req.query.redirect);
+    const rawStoreDomain = b.storeDomain || b.shopDomain || b.store || b.shop || b.domain || req.query.storeDomain;
+    const out = await sapoController.startLogin(
+      req as never,
+      rawStoreDomain ? normalizePublicStoreDomain(rawStoreDomain) : undefined,
+      b.redirect || req.query.redirect,
+    );
     return finalizeResponse(res, out);
   });
   app.get('/api/oauth/install/login/entry', async (c) => {

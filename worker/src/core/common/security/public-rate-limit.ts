@@ -12,17 +12,23 @@ const firstString = (value: unknown): string => {
   return typeof candidate === 'string' ? candidate.trim().toLowerCase() : '';
 };
 
+const BARE_SAPO_SUBDOMAIN_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+
 export const normalizeStoreDomainCandidate = (raw: unknown): string => {
   const text = firstString(raw);
   if (!text) return '';
-  return (
+  const cleaned =
     text
       .replace(/^https?:\/\//, '')
       .split('/')[0]
       ?.split('?')[0]
       ?.trim()
-      .replace(/\.$/, '') ?? ''
-  );
+      .replace(/\.$/, '') ?? '';
+  if (!cleaned) return '';
+  if (!cleaned.includes('.') && BARE_SAPO_SUBDOMAIN_RE.test(cleaned)) {
+    return `${cleaned}.mysapo.net`;
+  }
+  return cleaned;
 };
 
 export const resolveStoreScope = (req: Request): string | null => {
