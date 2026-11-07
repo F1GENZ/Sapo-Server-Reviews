@@ -55,7 +55,7 @@ Cookie flags are derived, not configured: `HttpOnly`, `Path=/`, `Secure` in prod
 
 | Name | Default | Production | Rule |
 |---|---|---|---|
-| `REDIS_HOST` | empty | required | With no host the server uses in-process memory (tests only; state is lost on restart and not shared). |
+| `REDIS_HOST` | empty | optional | With no host the server uses in-process memory. That mode is usable in production for a single instance (PM2 fork mode, 1 instance); state is lost on restart and is not shared. Scale beyond one instance requires setting a Redis host again. |
 | `REDIS_PORT` | `6379` | explicit | Integer 1-65535. |
 | `REDIS_USERNAME` | empty | optional | ACL username. |
 | `REDIS_PASSWORD` | empty | when Redis requires auth | Not a placeholder in production. A value starting with `replace-with` is ignored. |

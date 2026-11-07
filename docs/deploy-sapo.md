@@ -176,7 +176,7 @@ Every key, default and production requirement is in `docs/env-contract.md` (sour
 - `SAPO_CLIENT_ID`, `SAPO_CLIENT_SECRET`, `SAPO_SCOPE`, `SAPO_INSTALL_CALLBACK_URL`, `SAPO_LOGIN_CALLBACK_URL`
 - `APP_SESSION_SECRET` (at least 32 bytes), `APP_SESSION_TTL_SECONDS`, `SESSION_HANDOFF_TTL_SECONDS`
 - `DATABASE_URL`, `DIRECT_URL`, `DATA_ENCRYPTION_KEY` (your own 32-byte key; the public sample key is rejected in every `NODE_ENV`)
-- `REDIS_HOST`, `REDIS_PORT`, `REDIS_KEY_PREFIX`, `REDIS_PASSWORD`
+- `REDIS_PORT`, `REDIS_KEY_PREFIX`; `REDIS_PASSWORD` when Redis requires auth. `REDIS_HOST` is optional: with no host the server uses in-process memory, which is usable in production only for a single PM2 fork instance (state is lost on restart, not shared); scale beyond one instance requires setting a Redis host again.
 - `SAPO_API_MAX_CONCURRENT`, the ingress rate-limit variables and `READINESS_TOKEN`
 
 `SAPO_API_MIN_INTERVAL_MS` was removed; delete it from a `.env` that still has it. Media (not required for boot): `R2_WORKER_URL`, `R2_UPLOAD_SECRET`, `R2_PUBLIC_DOMAIN`: set all three or none; one without the other two stops the boot in every `NODE_ENV`, and a set `R2_UPLOAD_SECRET` must be at least 32 bytes and not a placeholder (it also authorizes Worker list and delete). Without them uploads and media deletion do not work.

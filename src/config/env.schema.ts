@@ -367,7 +367,6 @@ export const loadEnv = (env: RawEnv = process.env): AppEnv => {
         'DATABASE_URL',
         'DIRECT_URL',
         'DATA_ENCRYPTION_KEY',
-        'REDIS_HOST',
         'REDIS_KEY_PREFIX',
         'READINESS_TOKEN',
         'AUTH_RATE_LIMIT_WINDOW_SECONDS',
