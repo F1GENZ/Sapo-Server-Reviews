@@ -8,21 +8,10 @@ const EPOCH_CACHE_TTL_SECONDS = 86_400;
 
 const localEpochs = new Map<string, number>();
 
-export const bumpStoreEdgeCacheSync = (storeDomain: string): number => {
-  const key = storeDomain.trim().toLowerCase();
-  if (!key) return 0;
-  const next = (localEpochs.get(key) ?? 0) + 1;
-  localEpochs.set(key, next);
-  return next;
-};
-
-export const bumpStoreEdgeCache = async (storeDomain: string): Promise<void> => {
-  const key = storeDomain.trim().toLowerCase();
-  if (!key) return;
-  const next = bumpStoreEdgeCacheSync(key);
+const writeRemoteStoreEpoch = async (key: string, next: number): Promise<void> => {
   const cache = typeof caches !== 'undefined' ? (caches as unknown as { default?: Cache }).default ?? null : null;
   if (!cache) return;
-  const value = `${Date.now()}-${next}`;
+  const value = `${Date.now()}-${next}-${crypto.randomUUID().slice(0, 8)}`;
   try {
     await cache.put(
       new Request(`${EDGE_CACHE_ORIGIN}/sapo-reviews-epoch/${encodeURIComponent(key)}`, { method: 'GET' }),
@@ -39,6 +28,23 @@ export const bumpStoreEdgeCache = async (storeDomain: string): Promise<void> => 
   }
 };
 
+export const bumpStoreEdgeCacheSync = (storeDomain: string): number => {
+  const key = storeDomain.trim().toLowerCase();
+  if (!key) return 0;
+  const next = (localEpochs.get(key) ?? 0) + 1;
+  localEpochs.set(key, next);
+  void writeRemoteStoreEpoch(key, next);
+  return next;
+};
+
+export const bumpStoreEdgeCache = async (storeDomain: string): Promise<void> => {
+  const key = storeDomain.trim().toLowerCase();
+  if (!key) return;
+  const next = (localEpochs.get(key) ?? 0) + 1;
+  localEpochs.set(key, next);
+  await writeRemoteStoreEpoch(key, next);
+};
+
 export const getStoreEdgeCacheEpoch = async (storeDomain: string): Promise<string> => {
   const key = storeDomain.trim().toLowerCase();
   const local = localEpochs.get(key) ?? 0;
@@ -50,7 +56,7 @@ export const getStoreEdgeCacheEpoch = async (storeDomain: string): Promise<strin
     );
     if (!hit) return `0:${local}`;
     const text = (await hit.text()).trim();
-    return `${text || '0'}:${local}`;
+    return text || `0:${local}`;
   } catch {
     return `0:${local}`;
   }
@@ -83,6 +89,46 @@ export const extractPublicStoreDomain = (request: Request): string => {
   for (const q of PUBLIC_STORE_DOMAIN_QUERY_PARAMS) {
     const fromQuery = normalizePublicStoreDomain(url.searchParams.get(q));
     if (fromQuery && STORE_DOMAIN_RE.test(fromQuery)) return fromQuery;
+  }
+  return '';
+};
+
+const decodeJwtStoreDomain = (token: string | null | undefined): string => {
+  if (!token) return '';
+  const parts = token.trim().split('.');
+  if (parts.length !== 3) return '';
+  try {
+    const json = Buffer.from(parts[1], 'base64url').toString('utf8');
+    const parsed: unknown = JSON.parse(json);
+    if (parsed && typeof parsed === 'object' && 'storeDomain' in parsed && typeof parsed.storeDomain === 'string') {
+      const normalized = normalizePublicStoreDomain(parsed.storeDomain);
+      if (normalized && STORE_DOMAIN_RE.test(normalized)) return normalized;
+    }
+  } catch {
+    // Ignore malformed token.
+  }
+  return '';
+};
+
+export const peekSessionStoreDomain = (request: Request): string => {
+  const auth = request.headers.get('authorization') || '';
+  if (/^Bearer\s+/i.test(auth)) {
+    const fromBearer = decodeJwtStoreDomain(auth.replace(/^Bearer\s+/i, ''));
+    if (fromBearer) return fromBearer;
+  }
+  const cookie = request.headers.get('cookie') || '';
+  for (const part of cookie.split(/;\s*/)) {
+    const eq = part.indexOf('=');
+    if (eq <= 0) continue;
+    const k = part.slice(0, eq).trim();
+    if (k === 'f1genz_review_sapo_session') {
+      try {
+        const fromCookie = decodeJwtStoreDomain(decodeURIComponent(part.slice(eq + 1)));
+        if (fromCookie) return fromCookie;
+      } catch {
+        // Ignore malformed cookie.
+      }
+    }
   }
   return '';
 };
@@ -120,6 +166,7 @@ export const serveStorefrontWithEdgeCache = async (
     const cached = await cache.match(cacheKey);
     if (cached) {
       const headers = new Headers(cached.headers);
+      headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       headers.set('X-Edge-Cache', 'HIT');
       return new Response(cached.body, { status: cached.status, headers });
     }
@@ -144,7 +191,7 @@ export const serveStorefrontWithEdgeCache = async (
   }
 
   const outHeaders = new Headers(upstream.headers);
-  outHeaders.set('Cache-Control', cacheControl);
+  outHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   outHeaders.set('X-Edge-Cache', 'MISS');
   return new Response(bytes, { status: 200, headers: outHeaders });
 };

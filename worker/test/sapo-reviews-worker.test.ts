@@ -247,8 +247,8 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     }
   });
 
-  it('serves /livez, /healthz, /api/healthz, /readyz, storefront static assets, and CORS preflights', async () => {
-    for (const path of ['/livez', '/healthz', '/api/healthz']) {
+  it('serves /livez, /health, /healthz, /api/healthz, /readyz, storefront static assets, and CORS preflights', async () => {
+    for (const path of ['/livez', '/health', '/healthz', '/api/healthz']) {
       const res = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev${path}`);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ ok: true });
@@ -985,5 +985,68 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
       storeDomain: STORE_DOMAIN,
       topic: 'products/update',
     });
+  });
+
+  it('supports PUT/PATCH parity on review/qna moderation, explicit pin payload, slider limit, and edge cache invalidation across full and bare shop params', async () => {
+    const headers = buildAdminHeaders();
+    const bareShop = 'f1genz-babymart';
+
+    // Prime edge cache on both full ?shop=f1genz-babymart.mysapo.net and bare ?shop=f1genz-babymart
+    await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${STORE_DOMAIN}`);
+    const hitFull = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${STORE_DOMAIN}`);
+    expect(hitFull.headers.get('X-Edge-Cache')).toBe('HIT');
+
+    await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${bareShop}`);
+    const hitBare = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${bareShop}`);
+    expect(hitBare.headers.get('X-Edge-Cache')).toBe('HIT');
+
+    // Admin pin review with explicit { pinned: true } via PUT (without ?shop= query, using JWT session only)
+    const pinRes = await SELF.fetch(
+      `https://api-sapo-reviews.f1genz.dev/api/admin/reviews/${PRODUCT_ID}/imp-babymart-1/pin`,
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ pinned: true }),
+      },
+    );
+    expect(pinRes.status).toBe(200);
+    const pinnedReview = await readData<{ pinned: boolean }>(pinRes);
+    expect(pinnedReview.pinned).toBe(true);
+
+    // Both full and bare shop summary queries must immediately rotate to MISS -> HIT
+    const missFull = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${STORE_DOMAIN}`);
+    expect(missFull.headers.get('X-Edge-Cache')).toBe('MISS');
+    const missBare = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${bareShop}`);
+    expect(missBare.headers.get('X-Edge-Cache')).toBe('MISS');
+
+    // PUT reply & PUT answer parity
+    const replyPutRes = await SELF.fetch(
+      `https://api-sapo-reviews.f1genz.dev/api/admin/reviews/${PRODUCT_ID}/imp-babymart-1/reply`,
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ reply: 'Cam on ban da mua hang!' }),
+      },
+    );
+    expect(replyPutRes.status).toBe(200);
+
+    const ansPutRes = await SELF.fetch(
+      `https://api-sapo-reviews.f1genz.dev/api/admin/qna/${PRODUCT_ID}/q-babymart-1/answer`,
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ answer: 'Dung cho be tu 6 thang tuoi tro len.' }),
+      },
+    );
+    expect(ansPutRes.status).toBe(200);
+
+    // Slider with ?limit=5
+    const sliderRes = await SELF.fetch(
+      `https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/slider?limit=5&shop=${STORE_DOMAIN}`,
+    );
+    expect(sliderRes.status).toBe(200);
+    const sliderData = await readData<{ v: number; items: Array<{ id: string }> }>(sliderRes);
+    expect(sliderData.v).toBe(1);
+    expect(sliderData.items.length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -305,13 +305,16 @@ export class ReviewController {
     @Param('productId', NumericIdPipe) productId: string,
     @Param('reviewId') reviewId: string,
     @Req() req: AuthRequest,
+    @Body() body?: { pinned?: unknown },
   ) {
     requireAuth(req);
+    const pinned = typeof body?.pinned === 'boolean' ? body.pinned : undefined;
     const review = await this.reviewService.pinReview(
       req.token,
       req.storeDomain,
       productId,
       reviewId,
+      pinned,
     );
     if (!review) throw new NotFoundException('Review not found');
     return { data: review };

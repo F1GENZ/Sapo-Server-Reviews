@@ -176,6 +176,7 @@ export class PublicReviewController {
     @Param('productId', NumericIdPipe) productId: string,
     @Headers('x-store-domain') storeDomainHeader?: string,
     @Query('storeDomain') storeDomainQuery?: string,
+    @Query('limit') limitRaw?: string,
   ) {
     const storeDomain = this.extractStoreDomain(storeDomainHeader, storeDomainQuery);
     const empty = { v: 1 as const, updated_at: Date.now(), items: [] };
@@ -187,12 +188,17 @@ export class PublicReviewController {
     if (!settings.enabled) {
       return { data: empty };
     }
+    const parsedLimit = limitRaw !== undefined && limitRaw !== '' ? Number(limitRaw) : NaN;
+    const count =
+      Number.isFinite(parsedLimit) && parsedLimit > 0
+        ? Math.max(5, Math.min(15, Math.trunc(parsedLimit)))
+        : settings.count;
     const page = await this.reviewService.getPublicReviews(storeDomain, productId, {
       page: 1,
-      limit: Math.max(30, settings.count),
+      limit: Math.max(30, count),
       sort: 'newest',
     });
-    return { data: buildSliderPayload(page.items, settings.count, Date.now()) };
+    return { data: buildSliderPayload(page.items, count, Date.now()) };
   }
 
   @Get(':productId/summary')

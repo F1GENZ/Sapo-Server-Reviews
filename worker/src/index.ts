@@ -1,5 +1,11 @@
 import './shims/nestjs-common';
-import { isCacheableStorefrontGet, serveStorefrontWithEdgeCache } from './edge-cache';
+import {
+  bumpStoreEdgeCache,
+  extractPublicStoreDomain,
+  isCacheableStorefrontGet,
+  peekSessionStoreDomain,
+  serveStorefrontWithEdgeCache,
+} from './edge-cache';
 import type { WorkerEnv } from './env';
 import { StoreDO } from './store-do';
 
@@ -27,7 +33,7 @@ export default {
     // 1. Fast edge health probes
     if (
       request.method === 'GET' &&
-      (url.pathname === '/livez' || url.pathname === '/healthz' || url.pathname === '/api/healthz')
+      (url.pathname === '/livez' || url.pathname === '/health' || url.pathname === '/healthz' || url.pathname === '/api/healthz')
     ) {
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
@@ -109,6 +115,18 @@ export default {
       return serveStorefrontWithEdgeCache(request, forwardToStore);
     }
 
-    return forwardToStore();
+    const response = await forwardToStore();
+    if (
+      request.method !== 'GET' &&
+      request.method !== 'HEAD' &&
+      request.method !== 'OPTIONS' &&
+      response.status < 400
+    ) {
+      const targetStore = extractPublicStoreDomain(request) || peekSessionStoreDomain(request);
+      if (targetStore) {
+        await bumpStoreEdgeCache(targetStore);
+      }
+    }
+    return response;
   },
 } satisfies ExportedHandler<WorkerEnv>;

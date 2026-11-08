@@ -500,6 +500,7 @@ export const createApp = (
 
   // Health & Readiness
   app.get('/livez', () => new Response(JSON.stringify(healthController.livez()), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }));
+  app.get('/health', () => new Response(JSON.stringify(healthController.livez()), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }));
   app.get('/healthz', () => new Response(JSON.stringify(healthController.livez()), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }));
   app.get('/api/healthz', () => new Response(JSON.stringify(healthController.livez()), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } }));
   app.get('/readyz', async (c) => {
@@ -690,6 +691,7 @@ export const createApp = (
       productId,
       req.headers['x-store-domain'],
       req.query.storeDomain,
+      req.query.limit,
     );
     return finalizeResponse(res, out);
   });
@@ -820,13 +822,15 @@ export const createApp = (
       const out = await reviewController.getWidgetConfig(req as never);
       return finalizeResponse(res, out);
     });
-    app.put(`${base}/widget-config`, async (c) => {
+    const handleUpdateWidgetConfig = async (c: Context) => {
       const { req, res } = await buildExpressAdapters(c, { parseBody: true });
       await requireShopAuth(req, res);
       const out = await reviewController.updateWidgetConfig(req.body as never, req as never);
       if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
       return finalizeResponse(res, out);
-    });
+    };
+    app.put(`${base}/widget-config`, handleUpdateWidgetConfig);
+    app.patch(`${base}/widget-config`, handleUpdateWidgetConfig);
     app.get(`${base}/widget-config/revisions`, async (c) => {
       const { req, res } = await buildExpressAdapters(c);
       await requireShopAuth(req, res);
@@ -846,13 +850,15 @@ export const createApp = (
       const out = await reviewController.getSpamConfig(req as never);
       return finalizeResponse(res, out);
     });
-    app.put(`${base}/spam-config`, async (c) => {
+    const handleUpdateSpamConfig = async (c: Context) => {
       const { req, res } = await buildExpressAdapters(c, { parseBody: true });
       await requireShopAuth(req, res);
       const out = await reviewController.updateSpamConfig(req.body as never, req as never);
       if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
       return finalizeResponse(res, out);
-    });
+    };
+    app.put(`${base}/spam-config`, handleUpdateSpamConfig);
+    app.patch(`${base}/spam-config`, handleUpdateSpamConfig);
     app.post(`${base}/sync-metafield`, async (c) => {
       const { req, res } = await buildExpressAdapters(c, { parseBody: true });
       await requireShopAuth(req, res);
@@ -928,53 +934,70 @@ export const createApp = (
       if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
       return finalizeResponse(res, out, 201);
     });
-    app.patch(`${base}/:productId/:reviewId/reply`, async (c) => {
+    const handleReplyReview = async (c: Context) => {
       const { req, res } = await buildExpressAdapters(c, { parseBody: true });
       await requireShopAuth(req, res);
-      const productId = numericIdPipe.transform(c.req.param('productId'));
+      const productId = numericIdPipe.transform(c.req.param('productId') ?? '');
       const out = await reviewController.replyToReview(
         productId,
-        c.req.param('reviewId'),
+        c.req.param('reviewId') ?? '',
         req.body as never,
         req as never,
       );
       if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
       return finalizeResponse(res, out);
-    });
-    app.patch(`${base}/:productId/:reviewId/pin`, async (c) => {
+    };
+    app.patch(`${base}/:productId/:reviewId/reply`, handleReplyReview);
+    app.put(`${base}/:productId/:reviewId/reply`, handleReplyReview);
+
+    const handlePinReview = async (c: Context) => {
       const { req, res } = await buildExpressAdapters(c, { parseBody: true });
       await requireShopAuth(req, res);
-      const productId = numericIdPipe.transform(c.req.param('productId'));
-      const out = await reviewController.pinReview(productId, c.req.param('reviewId'), req as never);
+      const productId = numericIdPipe.transform(c.req.param('productId') ?? '');
+      const out = await reviewController.pinReview(
+        productId,
+        c.req.param('reviewId') ?? '',
+        req as never,
+        req.body as never,
+      );
       if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
       return finalizeResponse(res, out);
-    });
-    app.patch(`${base}/:productId/:reviewId/status`, async (c) => {
+    };
+    app.patch(`${base}/:productId/:reviewId/pin`, handlePinReview);
+    app.put(`${base}/:productId/:reviewId/pin`, handlePinReview);
+    app.post(`${base}/:productId/:reviewId/pin`, handlePinReview);
+
+    const handleStatusReview = async (c: Context) => {
       const { req, res } = await buildExpressAdapters(c, { parseBody: true });
       await requireShopAuth(req, res);
-      const productId = numericIdPipe.transform(c.req.param('productId'));
+      const productId = numericIdPipe.transform(c.req.param('productId') ?? '');
       const out = await reviewController.updateStatus(
         productId,
-        c.req.param('reviewId'),
+        c.req.param('reviewId') ?? '',
         req.body as never,
         req as never,
       );
       if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
       return finalizeResponse(res, out);
-    });
-    app.patch(`${base}/:productId/:reviewId`, async (c) => {
+    };
+    app.patch(`${base}/:productId/:reviewId/status`, handleStatusReview);
+    app.put(`${base}/:productId/:reviewId/status`, handleStatusReview);
+
+    const handleUpdateReview = async (c: Context) => {
       const { req, res } = await buildExpressAdapters(c, { parseBody: true });
       await requireShopAuth(req, res);
-      const productId = numericIdPipe.transform(c.req.param('productId'));
+      const productId = numericIdPipe.transform(c.req.param('productId') ?? '');
       const out = await reviewController.updateReview(
         productId,
-        c.req.param('reviewId'),
+        c.req.param('reviewId') ?? '',
         req.body as never,
         req as never,
       );
       if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
       return finalizeResponse(res, out);
-    });
+    };
+    app.patch(`${base}/:productId/:reviewId`, handleUpdateReview);
+    app.put(`${base}/:productId/:reviewId`, handleUpdateReview);
     app.delete(`${base}/:productId/:reviewId`, async (c) => {
       const { req, res } = await buildExpressAdapters(c);
       await requireShopAuth(req, res);
@@ -1090,45 +1113,53 @@ export const createApp = (
       if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
       return finalizeResponse(res, out, 201);
     });
-    app.patch(`${base}/:productId/:questionId/answer`, async (c) => {
+    const handleAnswerQuestion = async (c: Context) => {
       const { req, res } = await buildExpressAdapters(c, { parseBody: true });
       await requireShopAuth(req, res);
-      const productId = numericIdPipe.transform(c.req.param('productId'));
+      const productId = numericIdPipe.transform(c.req.param('productId') ?? '');
       const out = await qnaController.answerQuestion(
         productId,
-        c.req.param('questionId'),
+        c.req.param('questionId') ?? '',
         req.body as never,
         req as never,
       );
       if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
       return finalizeResponse(res, out);
-    });
-    app.patch(`${base}/:productId/:questionId/status`, async (c) => {
+    };
+    app.patch(`${base}/:productId/:questionId/answer`, handleAnswerQuestion);
+    app.put(`${base}/:productId/:questionId/answer`, handleAnswerQuestion);
+
+    const handleStatusQuestion = async (c: Context) => {
       const { req, res } = await buildExpressAdapters(c, { parseBody: true });
       await requireShopAuth(req, res);
-      const productId = numericIdPipe.transform(c.req.param('productId'));
+      const productId = numericIdPipe.transform(c.req.param('productId') ?? '');
       const out = await qnaController.updateStatus(
         productId,
-        c.req.param('questionId'),
+        c.req.param('questionId') ?? '',
         req.body as never,
         req as never,
       );
       if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
       return finalizeResponse(res, out);
-    });
-    app.patch(`${base}/:productId/:questionId`, async (c) => {
+    };
+    app.patch(`${base}/:productId/:questionId/status`, handleStatusQuestion);
+    app.put(`${base}/:productId/:questionId/status`, handleStatusQuestion);
+
+    const handleUpdateQuestion = async (c: Context) => {
       const { req, res } = await buildExpressAdapters(c, { parseBody: true });
       await requireShopAuth(req, res);
-      const productId = numericIdPipe.transform(c.req.param('productId'));
+      const productId = numericIdPipe.transform(c.req.param('productId') ?? '');
       const out = await qnaController.updateQuestion(
         productId,
-        c.req.param('questionId'),
+        c.req.param('questionId') ?? '',
         req.body as never,
         req as never,
       );
       if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
       return finalizeResponse(res, out);
-    });
+    };
+    app.patch(`${base}/:productId/:questionId`, handleUpdateQuestion);
+    app.put(`${base}/:productId/:questionId`, handleUpdateQuestion);
     app.delete(`${base}/:productId/:questionId`, async (c) => {
       const { req, res } = await buildExpressAdapters(c);
       await requireShopAuth(req, res);
@@ -1268,7 +1299,7 @@ export const createApp = (
     await requireShopAuth(req, res);
     const query = {
       page: parseOptionalInt(req.query.page),
-      size: parseOptionalInt(req.query.size),
+      size: parseOptionalInt(req.query.size ?? req.query.limit),
     };
     const out = await outboundWebhookController.deliveries(c.req.param('id'), query, req as never);
     return finalizeResponse(res, out);

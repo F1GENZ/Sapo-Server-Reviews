@@ -101,6 +101,11 @@ export const updateReviewStatus = async (productId, reviewId, status) => {
   return res.data?.data;
 };
 
+export const pinReview = async (productId, reviewId, data = {}) => {
+  const res = await httpClient.patch(`/api/admin/reviews/${productId}/${reviewId}/pin`, data);
+  return res.data?.data;
+};
+
 export const deleteReview = async (productId, reviewId) => {
   const res = await httpClient.delete(`/api/admin/reviews/${productId}/${reviewId}`);
   return res.data?.data;
@@ -149,6 +154,11 @@ export const fetchQuestions = async (productId, params = {}) => {
       sort: sortBy,
     },
   });
+  return res.data?.data;
+};
+
+export const fetchQuestionStats = async (productId) => {
+  const res = await httpClient.get(`/api/admin/qna/${productId}/stats`);
   return res.data?.data;
 };
 
