@@ -1483,4 +1483,27 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
       await res.arrayBuffer();
     }
   });
+
+  it('product search matches accented queries against the ASCII handle', async () => {
+    const headers = buildAdminHeaders();
+    for (const q of ['Sữa bột', 'sua bot', 'sua-bot']) {
+      const res = await SELF.fetch(
+        `https://api-sapo-reviews.f1genz.dev/api/admin/products?title=${encodeURIComponent(q)}`,
+        { headers },
+      );
+      expect(res.status, q).toBe(200);
+      const out = await readData<{ products: Array<{ productId: string }> }>(res);
+      expect(out.products.map((p) => p.productId), q).toContain(PRODUCT_ID);
+    }
+  });
+
+  it('unsafe admin requests with only the session cookie (no Bearer) are rejected', async () => {
+    const { Authorization: _bearer, ...cookieOnly } = buildAdminHeaders();
+    const res = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/admin/reviews/${PRODUCT_ID}`, {
+      method: 'POST',
+      headers: cookieOnly,
+      body: JSON.stringify({ rating: 5, author: 'Csrf Probe', content: 'khong duoc tao' }),
+    });
+    expect(res.status).toBe(401);
+  });
 });

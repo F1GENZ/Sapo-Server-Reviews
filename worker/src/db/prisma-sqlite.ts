@@ -564,13 +564,7 @@ const matchesFieldCondition = (actual: unknown, cond: unknown): boolean => {
   }
   if ('contains' in c && c.contains !== undefined) {
     if (actual === null || actual === undefined) return false;
-    const aStr = normStr(actual);
-    const cStr = normStr(c.contains);
-    const aBase = aStr.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd');
-    const cBase = cStr.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd');
-    if (!aStr.includes(cStr) && (!modeInsensitive || !aBase.includes(cBase))) {
-      return false;
-    }
+    if (!normStr(actual).includes(normStr(c.contains))) return false;
   }
   if ('startsWith' in c && c.startsWith !== undefined) {
     if (actual === null || actual === undefined) return false;
