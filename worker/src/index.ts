@@ -192,12 +192,18 @@ export default {
     // 2. Storefront static widget JS/CSS
     if (
       request.method === 'GET' &&
-      (url.pathname === '/storefront/f1genz-storefront.js' || url.pathname === '/storefront/f1genz-storefront.css') &&
+      (url.pathname === '/storefront/f1genz-storefront.js' ||
+        url.pathname === '/storefront/review-widget.js' ||
+        url.pathname === '/storefront/f1genz-storefront.css' ||
+        url.pathname === '/storefront/review-widget.css') &&
       env.ASSETS
     ) {
-      const assetRes = await env.ASSETS.fetch(request);
+      const isJs = url.pathname.endsWith('.js');
+      const canonicalPath = isJs ? '/storefront/f1genz-storefront.js' : '/storefront/f1genz-storefront.css';
+      const assetUrl = new URL(request.url);
+      assetUrl.pathname = canonicalPath;
+      const assetRes = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
       if (assetRes.status === 200) {
-        const isJs = url.pathname.endsWith('.js');
         return recordSapoAnalytics(
           env,
           request,
@@ -209,6 +215,7 @@ export default {
               'Cache-Control': STOREFRONT_ASSET_CACHE_CONTROL,
               'Access-Control-Allow-Origin': '*',
               'X-Content-Type-Options': 'nosniff',
+              'X-Edge-Cache': 'HIT',
             },
           }),
           startMs,

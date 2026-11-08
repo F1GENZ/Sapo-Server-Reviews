@@ -13,11 +13,15 @@ export class MediaController {
     @Req() req: { storeDomain?: string },
     @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })) body: PresignDto,
   ) {
+    const productId =
+      body?.productId != null && (typeof body.productId === 'string' || typeof body.productId === 'number')
+        ? String(body.productId).trim()
+        : '';
     const ticket = this.media.createUploadTicket({
       storeDomain: req.storeDomain || '',
-      productId: body.productId,
-      contentType: body.contentType,
-      fileSize: body.fileSize,
+      productId,
+      contentType: body?.contentType,
+      fileSize: body?.fileSize,
     });
     return { data: ticket };
   }

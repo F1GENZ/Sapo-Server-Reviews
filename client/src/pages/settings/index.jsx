@@ -61,7 +61,7 @@ const defaultConfig = {
   formTitleMode: "optional",
   formContentMode: "optional",
   reviewLayout: "list",
-  reviewQnaDisplayMode: "stacked",
+  reviewQnaDisplayMode: "tabs",
   reviewItemsPerPage: 5,
   allowImage: true,
   allowVideo: true,
@@ -1284,7 +1284,7 @@ const SettingsPage = () => {
   const handleRestoreDefault = useCallback(() => setResetOpen(true), []);
   const confirmRestoreDefault = useCallback(() => {
     setLocalConfig({ ...defaultConfig });
-    setSpamDraft({});
+    setSpamDraft({ blockedWords: [], maxContentLength: 5000 });
     setResetOpen(false);
   }, [defaultConfig]);
 

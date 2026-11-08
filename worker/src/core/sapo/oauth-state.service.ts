@@ -66,12 +66,21 @@ export class OAuthStateService {
     return { state };
   }
 
-  async consume(state: unknown, expectedFlow: OAuthFlow): Promise<OAuthStateData> {
+  async peekFlow(state: unknown): Promise<OAuthFlow | null> {
+    if (typeof state !== 'string' || !STATE_REGEX.test(state)) {
+      return null;
+    }
+    const data = await this.redis.get<OAuthStateData>(this.key(state));
+    return data?.flow ?? null;
+  }
+
+  async consume(state: unknown, expectedFlow: OAuthFlow | readonly OAuthFlow[]): Promise<OAuthStateData> {
     if (typeof state !== 'string' || !STATE_REGEX.test(state)) {
       throw new UnauthorizedException('Invalid OAuth state');
     }
     const data = await this.redis.getDel<OAuthStateData>(this.key(state));
-    if (!data?.flow || data.flow !== expectedFlow) {
+    const allowed = Array.isArray(expectedFlow) ? expectedFlow.includes(data?.flow as OAuthFlow) : data?.flow === expectedFlow;
+    if (!data?.flow || !allowed) {
       throw new UnauthorizedException('Invalid or expired OAuth state');
     }
     return data;

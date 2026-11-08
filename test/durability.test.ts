@@ -470,15 +470,22 @@ const runInstall = async (existingInstall: Row | null): Promise<UpsertArgs> => {
   return captured.args;
 };
 
-test('reinstalling after an uninstall keeps the original installedAt so no new trial is minted', async () => {
+test('reinstalling after an uninstall refreshes installedAt while an active re-auth preserves it', async () => {
   const original = new Date('2026-01-10T00:00:00.000Z');
   const args = await runInstall({
     status: 'uninstalled',
     installedAt: original,
     uninstalledAt: new Date(Date.now() - 60_000),
   });
-  assert.equal('installedAt' in args.update, false, 'reinstall must not overwrite installedAt');
+  assert.ok(args.update.installedAt instanceof Date, 'reinstall after uninstall refreshes installedAt');
   assert.equal(args.update.uninstalledAt, null);
+
+  const activeArgs = await runInstall({
+    status: 'active',
+    installedAt: original,
+    uninstalledAt: null,
+  });
+  assert.equal('installedAt' in activeArgs.update, false, 'active re-auth preserves original installedAt');
 
   const fresh = await runInstall(null);
   assert.ok(fresh.create.installedAt instanceof Date, 'a first install records installedAt');

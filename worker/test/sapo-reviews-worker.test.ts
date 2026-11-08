@@ -892,11 +892,18 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
       expect(oauthBody.url).toContain(`${STORE_DOMAIN}/admin/oauth/authorize`);
     }
 
-    const oauthStartRes = await SELF.fetch(
-      `https://api-sapo-reviews.f1genz.dev/api/oauth/install/start?shop=${STORE_DOMAIN}`,
-    );
-    expect(oauthStartRes.status).toBe(200);
-    expect(await oauthStartRes.text()).toContain(`${STORE_DOMAIN}/admin/oauth/authorize`);
+    for (const startPath of ['/api/oauth/install/start', '/api/oauth/install']) {
+      const oauthStartRes = await SELF.fetch(
+        `https://api-sapo-reviews.f1genz.dev${startPath}?shop=${STORE_DOMAIN}`,
+        { redirect: 'manual', headers: { Accept: 'text/html' } },
+      );
+      expect(oauthStartRes.status, startPath).toBe(302);
+      const location = oauthStartRes.headers.get('Location') || '';
+      expect(location).toContain(`${STORE_DOMAIN}/admin/oauth/authorize`);
+      expect(decodeURIComponent(location)).toContain(
+        'https://api-sapo-reviews.f1genz.dev/api/oauth/install/callback',
+      );
+    }
 
     // 2. OAuth verify-hmac -> handoff code -> session exchange -> session probe -> logout
     const ts = String(Math.floor(Date.now() / 1000));
@@ -919,6 +926,10 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
       body: JSON.stringify({ handoffCode: verifyBody.handoffCode }),
     });
     expect(exchangeRes.status).toBe(200);
+    const exchangeCookie = exchangeRes.headers.get('set-cookie') || '';
+    expect(exchangeCookie).toContain('SameSite=None');
+    expect(exchangeCookie).toContain('Secure');
+    expect(exchangeCookie).toContain('HttpOnly');
     const exchangeBody = (await exchangeRes.json()) as { sessionToken: string; storeDomain: string };
     expect(exchangeBody.storeDomain).toBe(STORE_DOMAIN);
     expect(exchangeBody.sessionToken).toBeTruthy();
@@ -1255,5 +1266,221 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     );
     expect(failedAcked).toBe(0);
     expect(retried).toBe(1);
+  });
+
+  it('accepts a login-flow state on the install callback without a 401 state error', async () => {
+    const entryRes = await SELF.fetch(
+      `https://api-sapo-reviews.f1genz.dev/api/oauth/install/login/entry?storeDomain=${STORE_DOMAIN}`,
+    );
+    expect(entryRes.status).toBe(200);
+    const { url } = (await entryRes.json()) as { url: string };
+    const state = new URL(url).searchParams.get('state');
+    expect(state).toBeTruthy();
+
+    const cbRes = await SELF.fetch(
+      `https://api-sapo-reviews.f1genz.dev/api/oauth/install/callback?code=fake-code&state=${state}&shop=${STORE_DOMAIN}`,
+      { redirect: 'manual' },
+    );
+    const cbText = await cbRes.text();
+    expect(cbText).not.toContain('Invalid or expired OAuth state');
+  });
+
+  it('admin reviews and Q&A honour sortBy/pageSize, edit created_at/title, clear reply, and Q&A answer approves a pending question', async () => {
+    const headers = buildAdminHeaders();
+    const base = 'https://api-sapo-reviews.f1genz.dev';
+
+    const createRes = await SELF.fetch(`${base}/api/admin/reviews/${PRODUCT_ID}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        rating: 4,
+        author: 'Sort Tester',
+        title: 'Tieu de can xoa',
+        content: 'Noi dung kiem thu sap xep',
+        created_at: 1_600_000_000_000,
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = await readData<{ id: string }>(createRes);
+
+    const oldestRes = await SELF.fetch(`${base}/api/admin/reviews?sortBy=oldest&pageSize=1`, { headers });
+    expect(oldestRes.status).toBe(200);
+    const oldest = await readData<{ items: Array<{ id: string }>; pageSize: number }>(oldestRes);
+    expect(oldest.pageSize).toBe(1);
+    expect(oldest.items).toHaveLength(1);
+    expect(oldest.items[0].id).toBe(created.id);
+
+    const editRes = await SELF.fetch(`${base}/api/admin/reviews/${PRODUCT_ID}/${created.id}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ title: '', created_at: 1_500_000_000_000 }),
+    });
+    expect(editRes.status).toBe(200);
+    const edited = await readData<{ title: string | null; created_at: number }>(editRes);
+    expect(edited.title ?? null).toBeNull();
+    expect(Number(edited.created_at)).toBe(1_500_000_000_000);
+
+    const replyRes = await SELF.fetch(`${base}/api/admin/reviews/${PRODUCT_ID}/${created.id}/reply`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ reply: 'Cam on ban' }),
+    });
+    expect(replyRes.status).toBe(200);
+    const clearRes = await SELF.fetch(`${base}/api/admin/reviews/${PRODUCT_ID}/${created.id}/reply`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ reply: '' }),
+    });
+    expect(clearRes.status).toBe(200);
+    const cleared = await readData<{ reply: string | null; replied_at: number | null }>(clearRes);
+    expect(cleared.reply ?? null).toBeNull();
+    expect(cleared.replied_at ?? null).toBeNull();
+
+    const qnaRes = await SELF.fetch(`${base}/api/admin/qna?status=approved&pageSize=5&sortBy=oldest`, { headers });
+    expect(qnaRes.status).toBe(200);
+    const qnaPage = await readData<{ items: Array<{ status: string }>; pageSize: number }>(qnaRes);
+    expect(qnaPage.pageSize).toBe(5);
+    for (const item of qnaPage.items) expect(item.status).toBe('approved');
+
+    const askRes = await SELF.fetch(`${base}/api/admin/qna/${PRODUCT_ID}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ question: 'San pham nay dung duoc bao lau?', author: 'Khach A' }),
+    });
+    expect(askRes.status).toBe(201);
+    const asked = await readData<{ id: string; status: string }>(askRes);
+    const patchRes = await SELF.fetch(`${base}/api/admin/qna/${PRODUCT_ID}/${asked.id}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ answer: 'Dung duoc 2 nam.' }),
+    });
+    expect(patchRes.status).toBe(200);
+    const answered = await readData<{ status: string; answer: string }>(patchRes);
+    expect(answered.answer).toBe('Dung duoc 2 nam.');
+    expect(answered.status).toBe('approved');
+  });
+
+  it('JSON import keeps verified, pinned and media', async () => {
+    const headers = buildAdminHeaders();
+    const base = 'https://api-sapo-reviews.f1genz.dev';
+    const payload = JSON.stringify([
+      {
+        productId: PRODUCT_ID,
+        reviewId: 'json-keep-01',
+        rating: 5,
+        author: 'Import Keeper',
+        content: 'Giu nguyen truong khi import',
+        status: 'approved',
+        verified: true,
+        pinned: true,
+        media: [{ url: 'https://images-sapo.f1genz.dev/reviews/x/1/a.png', type: 'image' }],
+      },
+    ]);
+    const applyRes = await SELF.fetch(`${base}/api/admin/reviews/import`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ format: 'json', body: payload }),
+    });
+    expect(applyRes.status).toBe(200);
+
+    const listRes = await SELF.fetch(`${base}/api/admin/reviews/${PRODUCT_ID}`, { headers });
+    expect(listRes.status).toBe(200);
+    const body = (await listRes.json()) as { data: unknown };
+    const rows = (Array.isArray(body.data) ? body.data : (body.data as { items: unknown[] }).items) as Array<{
+      id: string;
+      verified: boolean;
+      pinned: boolean;
+      media: Array<{ url: string }>;
+    }>;
+    const row = rows.find((r) => r.id === 'json-keep-01');
+    expect(row).toBeTruthy();
+    expect(row!.verified).toBe(true);
+    expect(row!.pinned).toBe(true);
+    expect(row!.media).toHaveLength(1);
+  });
+
+  it('runtime validation rejects bad review, status, widget config payloads and coerces numeric productId for upload tickets', async () => {
+    const headers = buildAdminHeaders();
+    const base = 'https://api-sapo-reviews.f1genz.dev';
+
+    const badRating = await SELF.fetch(`${base}/api/admin/reviews/${PRODUCT_ID}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ rating: 99, author: 'X', content: 'abc' }),
+    });
+    expect(badRating.status).toBe(400);
+
+    const badStatus = await SELF.fetch(`${base}/api/admin/reviews/${PRODUCT_ID}/imp-babymart-1/status`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ status: 'invalid' }),
+    });
+    expect(badStatus.status).toBe(400);
+
+    const badIcon = await SELF.fetch(`${base}/api/admin/reviews/widget-config`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ starIconUrl: 'javascript:alert(1)' }),
+    });
+    expect(badIcon.status).toBe(400);
+
+    const ticketRes = await SELF.fetch(`${base}/api/admin/media/upload-ticket`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        productId: Number(PRODUCT_ID),
+        contentType: 'image/png',
+        fileSize: VALID_PNG_BYTES.length,
+      }),
+    });
+    expect(ticketRes.status).toBe(201);
+  });
+
+  it('public Q&A submit response carries no email or phone', async () => {
+    const res = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/qna/${PRODUCT_ID}?shop=${STORE_DOMAIN}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        author: 'Khach Hoi',
+        question: 'Con hang mau xanh khong shop?',
+        email: 'ask@example.com',
+      }),
+    });
+    expect(res.status).toBe(201);
+    const text = await res.text();
+    expect(text).not.toContain('ask@example.com');
+    const json = JSON.parse(text) as { data: Record<string, unknown> };
+    expect('email' in json.data).toBe(false);
+    expect('phone' in json.data).toBe(false);
+  });
+
+  it('outbound webhook test reports a boolean delivered flag', async () => {
+    const headers = buildAdminHeaders();
+    const base = 'https://api-sapo-reviews.f1genz.dev';
+    const createRes = await SELF.fetch(`${base}/api/admin/outbound-webhooks`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ url: 'https://93.184.216.34/sapo-test', events: ['review.created'], active: true }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = await readData<{ endpoint: { id: string } }>(createRes);
+    const testRes = await SELF.fetch(`${base}/api/admin/outbound-webhooks/${created.endpoint.id}/test`, {
+      method: 'POST',
+      headers,
+      body: '{}',
+    });
+    expect(testRes.status).toBeLessThan(300);
+    const out = await readData<{ delivered: boolean; status: string; error: string | null }>(testRes);
+    expect(typeof out.delivered).toBe('boolean');
+    expect(out.delivered).toBe(out.status === 'delivered');
+  });
+
+  it('storefront assets and the review-widget alias are served with open CORS', async () => {
+    for (const path of ['/storefront/f1genz-storefront.js', '/storefront/review-widget.js']) {
+      const res = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev${path}`);
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get('Access-Control-Allow-Origin'), path).toBe('*');
+      await res.arrayBuffer();
+    }
   });
 });

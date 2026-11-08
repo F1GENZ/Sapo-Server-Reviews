@@ -13,6 +13,8 @@ import {
   CheckOutlined,
   EyeInvisibleOutlined,
   ShoppingOutlined,
+  PushpinOutlined,
+  PushpinFilled,
 } from "@ant-design/icons";
 import { suggestReviewReply } from "../../common/ApiService";
 import {
@@ -99,6 +101,7 @@ const ReviewCard = ({
   onReply,
   onEdit,
   onStatusChange,
+  onTogglePin,
   compact,
   productId,
   productUrl,
@@ -110,8 +113,8 @@ const ReviewCard = ({
   const [replySubmitting, setReplySubmitting] = useState(false);
   const [aiSuggesting, setAiSuggesting] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
+  const [pinPending, setPinPending] = useState(false);
   const [statusAction, setStatusAction] = useState(null);
-  const [editVideoUrl, setEditVideoUrl] = useState("");
   const fileRef = useRef(null);
   const { upload, uploading, progress } = useMediaUpload();
   const [edit, dispatchEdit] = useReducer(editReducer, initEditState);
@@ -237,7 +240,7 @@ const ReviewCard = ({
         author,
         email,
         phone,
-        title: title || undefined,
+        title,
         content,
         status: edit.status,
         verified: edit.verified,
@@ -289,6 +292,39 @@ const ReviewCard = ({
     }
   };
 
+  const handleDeleteReply = async () => {
+    if (!onReply) return;
+
+    setReplySubmitting(true);
+    try {
+      await onReply(review.id, { reply: "" }, review);
+      setReplying(false);
+      setReplyText("");
+      toast.success("Đã xoá phản hồi");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Xoá phản hồi thất bại"));
+    } finally {
+      setReplySubmitting(false);
+    }
+  };
+
+  const handleTogglePinClick = async () => {
+    if (!onTogglePin && !onEdit) return;
+    const nextPinned = !review.pinned;
+    setPinPending(true);
+    try {
+      if (onTogglePin) {
+        await onTogglePin(review);
+      } else if (onEdit) {
+        await onEdit(review.id, { pinned: nextPinned }, review);
+      }
+      toast.success(nextPinned ? "Đã ghim đánh giá" : "Đã bỏ ghim đánh giá");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Cập nhật ghim thất bại"));
+    } finally {
+      setPinPending(false);
+    }
+  };
   const handleDelete = async () => {
     if (!onDelete) return;
 
@@ -329,7 +365,7 @@ const ReviewCard = ({
     }
   };
 
-  const isBusy = replySubmitting || deletePending || edit.saving || uploading || !!statusAction;
+  const isBusy = replySubmitting || deletePending || pinPending || edit.saving || uploading || !!statusAction;
 
   const dateStr = new Date(review.created_at).toLocaleDateString("vi-VN", {
     day: "2-digit",
@@ -376,6 +412,11 @@ const ReviewCard = ({
             <Flex align="center" gap={8} wrap="wrap">
               <Text strong style={{ fontSize: 13, lineHeight: 1.4 }}>{review.author}</Text>
               <StarRating value={review.rating} size={12} />
+              {review.pinned ? (
+                <Tag color="gold" style={{ marginInlineEnd: 0, fontSize: 11 }}>
+                  Đã ghim
+                </Tag>
+              ) : null}
             </Flex>
             <Flex align="center" gap={8} wrap="wrap">
               <Text type="secondary" style={{ fontSize: 11 }}>{dateStr}</Text>
@@ -413,6 +454,20 @@ const ReviewCard = ({
           </Flex>
 
           <Flex gap={2}>
+            {onTogglePin || onEdit ? (
+              <Tooltip title={review.pinned ? "Bỏ ghim" : "Ghim"}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={review.pinned ? <PushpinFilled style={{ color: "#faad14" }} /> : <PushpinOutlined />}
+                  onClick={handleTogglePinClick}
+                  aria-label={review.pinned ? "Bỏ ghim" : "Ghim"}
+                  loading={pinPending}
+                  disabled={isBusy}
+                />
+              </Tooltip>
+            ) : null}
+
             {onEdit ? (
               <Tooltip title="Chỉnh sửa">
                 <Button
@@ -425,7 +480,6 @@ const ReviewCard = ({
                 />
               </Tooltip>
             ) : null}
-
             {status === "pending" && onStatusChange ? (
               <Tooltip title="Duyệt">
                 <Button
@@ -533,13 +587,13 @@ const ReviewCard = ({
           </Flex>
         ) : null}
 
-        {mediaItems.length > 0 && !compact && surface !== "row" ? (
+        {mediaItems.length > 0 && !compact ? (
           <div style={{ marginTop: 12 }}>
             <ReviewMedia items={mediaItems} />
           </div>
         ) : null}
 
-        {review.reply && !replying && !compact && surface !== "row" ? (
+        {review.reply && !replying && !compact ? (
           <div
             style={{
               marginTop: 12,
@@ -565,18 +619,37 @@ const ReviewCard = ({
             ) : null}
             <Paragraph style={{ margin: "4px 0 0", fontSize: 13 }}>{review.reply}</Paragraph>
             {onReply ? (
-              <Button
-                type="link"
-                size="small"
-                onClick={() => {
-                  setReplying(true);
-                  setReplyText(review.reply);
-                }}
-                style={{ padding: 0, fontSize: 11 }}
-                disabled={isBusy}
-              >
-                Chỉnh sửa
-              </Button>
+              <Flex gap={12} style={{ marginTop: 4 }}>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => {
+                    setReplying(true);
+                    setReplyText(review.reply);
+                  }}
+                  style={{ padding: 0, fontSize: 11 }}
+                  disabled={isBusy}
+                >
+                  Chỉnh sửa
+                </Button>
+                <Popconfirm
+                  title="Xoá phản hồi này?"
+                  onConfirm={handleDeleteReply}
+                  okText="Xoá"
+                  cancelText="Hủy"
+                  okButtonProps={{ loading: replySubmitting, danger: true }}
+                >
+                  <Button
+                    type="link"
+                    danger
+                    size="small"
+                    style={{ padding: 0, fontSize: 11 }}
+                    disabled={isBusy}
+                  >
+                    Xoá phản hồi
+                  </Button>
+                </Popconfirm>
+              </Flex>
             ) : null}
           </div>
         ) : null}
@@ -636,6 +709,19 @@ const ReviewCard = ({
           <Button key="close" onClick={() => setDetailOpen(false)}>
             Đóng
           </Button>,
+          onReply ? (
+            <Button
+              key="reply"
+              icon={<SendOutlined />}
+              onClick={() => {
+                setDetailOpen(false);
+                setReplying(true);
+                setReplyText(review.reply || "");
+              }}
+            >
+              {review.reply ? "Chỉnh sửa phản hồi" : "Phản hồi"}
+            </Button>
+          ) : null,
           onEdit ? (
             <Button
               key="edit"
@@ -660,6 +746,11 @@ const ReviewCard = ({
               <Flex align="center" gap={8} wrap>
                 <Text strong>{review.author}</Text>
                 <StarRating value={review.rating} size={14} />
+                {review.pinned ? (
+                  <Tag color="gold" style={{ marginInlineEnd: 0 }}>
+                    Đã ghim
+                  </Tag>
+                ) : null}
               </Flex>
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {dateStr}
@@ -698,6 +789,40 @@ const ReviewCard = ({
               <Paragraph style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
                 {review.reply}
               </Paragraph>
+              {onReply ? (
+                <Flex gap={12} style={{ marginTop: 6 }}>
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => {
+                      setDetailOpen(false);
+                      setReplying(true);
+                      setReplyText(review.reply);
+                    }}
+                    style={{ padding: 0, fontSize: 12 }}
+                    disabled={isBusy}
+                  >
+                    Chỉnh sửa phản hồi
+                  </Button>
+                  <Popconfirm
+                    title="Xoá phản hồi này?"
+                    onConfirm={handleDeleteReply}
+                    okText="Xoá"
+                    cancelText="Hủy"
+                    okButtonProps={{ loading: replySubmitting, danger: true }}
+                  >
+                    <Button
+                      type="link"
+                      danger
+                      size="small"
+                      style={{ padding: 0, fontSize: 12 }}
+                      disabled={isBusy}
+                    >
+                      Xoá phản hồi
+                    </Button>
+                  </Popconfirm>
+                </Flex>
+              ) : null}
             </div>
           ) : null}
         </Flex>

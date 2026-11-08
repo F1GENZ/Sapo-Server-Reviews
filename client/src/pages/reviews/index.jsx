@@ -12,6 +12,7 @@ import {
   fetchReviewSummary,
   importReviews,
   replyToReview,
+  pinReview,
   updateReview,
   updateReviewStatus,
 } from "../../common/ApiService";
@@ -99,6 +100,7 @@ const ReviewGridCell = memo(({
   onReply,
   onEdit,
   onStatusChange,
+  onTogglePin,
   selected,
   onToggleSelect,
 }) => (
@@ -118,6 +120,7 @@ const ReviewGridCell = memo(({
         onReply={onReply}
         onEdit={onEdit}
         onStatusChange={onStatusChange}
+        onTogglePin={onTogglePin}
         compact
       />
     </div>
@@ -133,6 +136,7 @@ const ReviewTableRow = memo(({
   onReply,
   onEdit,
   onStatusChange,
+  onTogglePin,
   selected,
   onToggleSelect,
 }) => (
@@ -151,6 +155,7 @@ const ReviewTableRow = memo(({
       onReply={onReply}
       onEdit={onEdit}
       onStatusChange={onStatusChange}
+      onTogglePin={onTogglePin}
       surface="row"
     />
   </div>
@@ -588,15 +593,18 @@ const ReviewsPage = () => {
     }
   }, [getProductId, invalidateAll, removeReviewFromCaches]);
 
-  const handleReply = useCallback(async (reviewId, data, review) => {
-    const productId = getProductId(review);
+  const handleReply = useCallback(async (reviewOrId, dataOrReply, maybeReview) => {
+    const review = typeof reviewOrId === "object" && reviewOrId !== null ? reviewOrId : maybeReview;
+    const reviewId = typeof reviewOrId === "object" && reviewOrId !== null ? reviewOrId.id : reviewOrId;
+    const nextReply = typeof dataOrReply === "string" ? dataOrReply.trim() : String(dataOrReply?.reply || "").trim();
+    const productId = getProductId(review || {});
     patchReviewCaches(productId, reviewId, (item) => ({
       ...item,
-      reply: data.reply,
-      replied_at: Date.now(),
+      reply: nextReply || null,
+      replied_at: nextReply ? Date.now() : null,
     }));
     try {
-      await replyToReview(productId, reviewId, data);
+      await replyToReview(productId, reviewId, { reply: nextReply });
       void invalidateAll();
     } catch (error) {
       void invalidateAll();
@@ -628,6 +636,18 @@ const ReviewsPage = () => {
     }
   }, [getProductId, invalidateAll, patchReviewCaches]);
 
+  const handleTogglePin = useCallback(async (review) => {
+    const productId = getProductId(review);
+    const nextPinned = !review.pinned;
+    patchReviewCaches(productId, review.id, (item) => ({ ...item, pinned: nextPinned }));
+    try {
+      await pinReview(productId, review.id, { pinned: nextPinned });
+      void invalidateAll();
+    } catch (error) {
+      void invalidateAll();
+      throw error;
+    }
+  }, [getProductId, invalidateAll, patchReviewCaches]);
   const reviewKey = useCallback(
     (review) => `${getProductId(review) || ""}:${review.id}`,
     [getProductId],
@@ -1067,6 +1087,7 @@ const ReviewsPage = () => {
                       onReply={handleReply}
                       onEdit={handleEdit}
                       onStatusChange={handleStatusChange}
+                      onTogglePin={handleTogglePin}
                       selected={selectedKeys.has(reviewKey(review))}
                       onToggleSelect={() => toggleSelected(review)}
                     />
@@ -1085,6 +1106,7 @@ const ReviewsPage = () => {
                     onReply={handleReply}
                     onEdit={handleEdit}
                     onStatusChange={handleStatusChange}
+                    onTogglePin={handleTogglePin}
                     selected={selectedKeys.has(reviewKey(review))}
                     onToggleSelect={() => toggleSelected(review)}
                   />

@@ -81,6 +81,10 @@ export class SapoService {
     return { url: await this.buildLoginUrl(input), reason: 'sso_required' };
   }
 
+  async peekStateFlow(state: unknown): Promise<'login' | 'install' | null> {
+    return typeof this.oauthState.peekFlow === 'function' ? this.oauthState.peekFlow(state) : null;
+  }
+
   async processLoginCallback(code: string, state: string | undefined): Promise<AuthStartResponse | HandoffResponse> {
     if (!code) throw new BadRequestException('Missing code');
     const oauthState = await this.oauthState.consume(state, 'login');
@@ -161,7 +165,9 @@ export class SapoService {
           accessTokenCiphertext: encryptedToken.ciphertext,
           accessTokenIv: encryptedToken.iv,
           accessTokenTag: encryptedToken.tag,
-          ...(existingInstall?.installedAt ? {} : { installedAt: new Date() }),
+          ...(!existingInstall?.installedAt || existingInstall.status === 'uninstalled' || existingInstall.uninstalledAt
+            ? { installedAt: new Date() }
+            : {}),
           uninstalledAt: null,
           lifecycleGeneration: { increment: 1 },
           tokenVersion: { increment: 1 },

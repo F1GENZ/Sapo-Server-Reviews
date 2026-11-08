@@ -26,7 +26,8 @@
   },
   "assets": {
     "directory": "./public",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "run_worker_first": ["/storefront/*", "/api/*"]
   },
   "durable_objects": {
     "bindings": [
@@ -78,8 +79,8 @@
     "REQUEST_BODY_LIMIT": "1mb",
     "WEBHOOK_BODY_LIMIT": "256kb",
     "SAPO_SCOPE": "read_products,write_products,read_orders,write_content",
-    "SAPO_LOGIN_CALLBACK_URL": "https://api-sapo-reviews.f1genz.dev/api/oauth/install/callback",
-    "SAPO_INSTALL_CALLBACK_URL": "https://api-sapo-reviews.f1genz.dev/api/oauth/install/login/callback",
+    "SAPO_INSTALL_CALLBACK_URL": "https://api-sapo-reviews.f1genz.dev/api/oauth/install/callback",
+    "SAPO_LOGIN_CALLBACK_URL": "https://api-sapo-reviews.f1genz.dev/api/oauth/install/login/callback",
     "SAPO_USE_CONNECT_TOKEN": "false",
     "APP_SESSION_COOKIE_NAME": "f1genz_review_sapo_session",
     "APP_SESSION_TTL_SECONDS": "43200",

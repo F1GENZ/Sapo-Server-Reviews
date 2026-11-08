@@ -178,7 +178,7 @@ export class ReviewProductStoreService {
         ...label,
         createdAt: input.createdAt ? BigInt(input.createdAt) : now,
       },
-      update: { ...data, ...labelUpdateFields(label) },
+      update: { ...data, ...labelUpdateFields(label), ...(input.createdAt ? { createdAt: BigInt(input.createdAt) } : {}) },
     });
   }
 

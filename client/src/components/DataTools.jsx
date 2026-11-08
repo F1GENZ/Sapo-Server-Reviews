@@ -193,7 +193,7 @@ export const ImportModal = ({
         type="info"
         showIcon
         message="Kiểm tra trước khi nhập"
-        description={`Bước 1 kiểm tra định dạng và sản phẩm; bước 2 mới ghi vào hệ thống. Tối đa 1000 dòng mỗi lần.`}
+        description={`Bước 1 kiểm tra định dạng và sản phẩm; bước 2 mới ghi vào hệ thống. Tối đa 2000 dòng mỗi lần.`}
         style={{ marginBottom: 12 }}
       />
       <Flex gap={8} align="center" wrap style={{ marginBottom: 12 }}>
@@ -239,7 +239,15 @@ export const ImportModal = ({
           setAppliedResult(null);
         }}
         rows={8}
-        placeholder={format === "json" ? '[{"product_id":"100","rating":5,…}]' : "product_id,review_id,rating,author,content,…"}
+        placeholder={
+          String(subjectLabel || "").toLowerCase().includes("hỏi")
+            ? format === "json"
+              ? '[{"product_id":"100","question":"Sản phẩm dùng thế nào?","author":"Nguyễn A",…}]'
+              : "product_id,question_id,author,question,answer,status,…"
+            : format === "json"
+              ? '[{"product_id":"100","rating":5,…}]'
+              : "product_id,review_id,rating,author,content,…"
+        }
       />
       <Divider style={{ margin: "12px 0" }} />
       <ResultSummary result={dryResult} verb="Đã kiểm tra" />

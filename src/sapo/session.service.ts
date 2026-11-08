@@ -157,10 +157,11 @@ export class SessionService {
 
   private cookieOptions(maxAgeSeconds: number): Parameters<typeof serialize>[2] {
     const crossSite = !isSameSiteDeployment(this.env.FRONTEND_URL, this.env.API_BASE_URL);
+    const isProd = this.env.NODE_ENV === 'production' || String(this.env.FRONTEND_URL || '').startsWith('https://');
     return {
       httpOnly: true,
-      secure: this.env.NODE_ENV === 'production' || crossSite,
-      sameSite: crossSite ? 'none' : 'lax',
+      secure: isProd || crossSite,
+      sameSite: isProd || crossSite ? 'none' : 'lax',
       path: '/',
       maxAge: maxAgeSeconds,
       ...(this.env.SESSION_COOKIE_DOMAIN ? { domain: this.env.SESSION_COOKIE_DOMAIN } : {}),
@@ -180,7 +181,12 @@ export class SessionService {
   }
 
   getSessionTokenFromRequest(req: Request): string | null {
-    const rawCookie = typeof req.headers.cookie === 'string' ? req.headers.cookie : '';
+    const rawAuth = typeof req.headers?.authorization === 'string' ? req.headers.authorization.trim() : '';
+    if (/^Bearer\s+/i.test(rawAuth)) {
+      const bearer = rawAuth.replace(/^Bearer\s+/i, '').trim();
+      if (bearer) return bearer;
+    }
+    const rawCookie = typeof req.headers?.cookie === 'string' ? req.headers.cookie : '';
     const encodedName = `${encodeURIComponent(this.env.SESSION_COOKIE_NAME)}=`;
     for (const part of rawCookie.split(/;\s*/)) {
       if (!part.startsWith(encodedName)) continue;

@@ -35,8 +35,17 @@ const firstQuery = (value: unknown): string | undefined => {
 };
 
 const wantsBrowserRedirect = (req: Request): boolean => {
-  const accept = String(req.headers.accept || '').toLowerCase();
+  const accept = String(req.headers?.accept || '').toLowerCase();
   return accept.includes('text/html') && !accept.includes('application/json');
+};
+
+const wantsJsonResponse = (req: Request): boolean => {
+  const format = firstQuery(req.query?.format)?.toLowerCase();
+  if (format === 'json' || format === 'text') return true;
+  const xrw = String(req.headers?.['x-requested-with'] || '').toLowerCase();
+  if (xrw === 'xmlhttprequest') return true;
+  const accept = String(req.headers?.accept || '').toLowerCase();
+  return accept.includes('application/json') && !accept.includes('text/html');
 };
 
 @Controller('/api')
@@ -60,7 +69,9 @@ export class SapoController {
   }
 
   private async finishAuthFlow(req: Request, res: Response, response: AuthFlowResponse): Promise<AuthFlowResponse | undefined> {
-    if (!wantsBrowserRedirect(req)) return response;
+    const shouldRedirect =
+      req.method === 'POST' ? wantsBrowserRedirect(req) : !wantsJsonResponse(req);
+    if (!shouldRedirect) return response;
     if ('url' in response) {
       res.redirect(302, response.url);
       return undefined;
@@ -79,10 +90,15 @@ export class SapoController {
     @Req() req: Request,
     @Query('storeDomain') storeDomain?: string,
     @Query('redirect') redirectTo?: string,
+    @Res({ passthrough: true }) res?: Response,
   ) {
     await this.assertAuthRate(req, 'oauth-login');
     const normalizedStore = normalizeStoreDomainCandidate(firstQuery(storeDomain)) || undefined;
     const result = await this.sapo.startLogin({ storeDomain: normalizedStore, redirectTo: firstQuery(redirectTo) });
+    if (res && typeof res.redirect === 'function' && req.method !== 'POST' && !wantsJsonResponse(req)) {
+      res.redirect(302, result.url);
+      return undefined;
+    }
     return wantsBrowserRedirect(req) ? result : result.url;
   }
 
@@ -123,7 +139,12 @@ export class SapoController {
     @Query('state') state?: string,
   ) {
     await this.assertAuthRate(req, 'oauth-callback');
-    const response = await this.sapo.processLoginCallback(firstQuery(code) || '', firstQuery(state));
+    const stateVal = firstQuery(state);
+    const flow = await this.sapo.peekStateFlow?.(stateVal);
+    const response =
+      flow === 'install'
+        ? await this.sapo.processInstallCallback(firstQuery(code) || '', stateVal)
+        : await this.sapo.processLoginCallback(firstQuery(code) || '', stateVal);
     return this.finishAuthFlow(req, res, response);
   }
 
@@ -135,16 +156,30 @@ export class SapoController {
     @Body('state') state?: string,
   ) {
     await this.assertAuthRate(req, 'oauth-callback');
-    const response = await this.sapo.processLoginCallback(firstQuery(code) || '', firstQuery(state));
+    const stateVal = firstQuery(state);
+    const flow = await this.sapo.peekStateFlow?.(stateVal);
+    const response =
+      flow === 'install'
+        ? await this.sapo.processInstallCallback(firstQuery(code) || '', stateVal)
+        : await this.sapo.processLoginCallback(firstQuery(code) || '', stateVal);
     return this.finishAuthFlow(req, res, response);
   }
 
   @Get('/oauth/install/start')
-  async installStart(@Req() req: Request, @Query('storeDomain') storeDomain?: string) {
+  async installStart(
+    @Req() req: Request,
+    @Query('storeDomain') storeDomain?: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
     await this.assertAuthRate(req, 'oauth-install-start');
     const target = normalizeStoreDomainCandidate(firstQuery(storeDomain));
     if (!target) throw new BadRequestException('storeDomain is required');
-    return this.sapo.buildInstallUrl({ storeDomain: target });
+    const url = await this.sapo.buildInstallUrl({ storeDomain: target });
+    if (res && typeof res.redirect === 'function' && req.method !== 'POST' && !wantsJsonResponse(req)) {
+      res.redirect(302, url);
+      return undefined;
+    }
+    return url;
   }
 
   @Get('/oauth/install/callback')
@@ -158,14 +193,29 @@ export class SapoController {
     await this.assertAuthRate(req, 'oauth-install');
     const authCode = firstQuery(code);
     if (!authCode) {
-      const storeDomain = normalizeStoreDomainCandidate(firstQuery(store));
+      const rawUrl = String(req.originalUrl || req.url || '');
+      const queryIndex = rawUrl.indexOf('?');
+      const rawQuery = queryIndex >= 0 ? rawUrl.slice(queryIndex + 1) : '';
+      const launchParams = new URLSearchParams(rawQuery);
+      if (launchParams.has('hmac') && launchParams.has('timestamp')) {
+        const frontendBase = (this.env.FRONTEND_URL || '').replace(/\/+$/, '');
+        return res.redirect(302, `${frontendBase}/install/login?${rawQuery}`);
+      }
+      const storeDomain = normalizeStoreDomainCandidate(
+        firstQuery(store) || firstQuery(req.query?.storeDomain) || firstQuery(req.query?.shop),
+      );
       if (storeDomain) {
-        const login = await this.sapo.buildLoginUrl({ storeDomain });
-        return res.redirect(302, login);
+        const installUrl = await this.sapo.buildInstallUrl({ storeDomain });
+        return res.redirect(302, installUrl);
       }
       return res.redirect(302, this.env.FRONTEND_URL || '/');
     }
-    const response = await this.sapo.processInstallCallback(authCode, firstQuery(state));
+    const stateVal = firstQuery(state);
+    const flow = await this.sapo.peekStateFlow?.(stateVal);
+    const response =
+      flow === 'login'
+        ? await this.sapo.processLoginCallback(authCode, stateVal)
+        : await this.sapo.processInstallCallback(authCode, stateVal);
     return this.finishAuthFlow(req, res, response);
   }
 
@@ -177,7 +227,12 @@ export class SapoController {
     @Body('state') state?: string,
   ) {
     await this.assertAuthRate(req, 'oauth-install');
-    const response = await this.sapo.processInstallCallback(firstQuery(code) || '', firstQuery(state));
+    const stateVal = firstQuery(state);
+    const flow = await this.sapo.peekStateFlow?.(stateVal);
+    const response =
+      flow === 'login'
+        ? await this.sapo.processLoginCallback(firstQuery(code) || '', stateVal)
+        : await this.sapo.processInstallCallback(firstQuery(code) || '', stateVal);
     return this.finishAuthFlow(req, res, response);
   }
 

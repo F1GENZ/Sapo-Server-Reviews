@@ -80,10 +80,10 @@ export const buildAppEnv = (raw: WorkerEnv): AppEnv => {
     SAPO_CLIENT_SECRET: String(raw.SAPO_CLIENT_SECRET ?? ''),
     SAPO_SCOPE: String(raw.SAPO_SCOPE ?? 'read_products,write_products,read_orders,write_content'),
     SAPO_INSTALL_CALLBACK_URL: String(
-      raw.SAPO_INSTALL_CALLBACK_URL ?? 'https://api-sapo-reviews.f1genz.dev/api/oauth/install/login/callback',
+      raw.SAPO_INSTALL_CALLBACK_URL ?? 'https://api-sapo-reviews.f1genz.dev/api/oauth/install/callback',
     ),
     SAPO_LOGIN_CALLBACK_URL: String(
-      raw.SAPO_LOGIN_CALLBACK_URL ?? 'https://api-sapo-reviews.f1genz.dev/api/oauth/install/callback',
+      raw.SAPO_LOGIN_CALLBACK_URL ?? 'https://api-sapo-reviews.f1genz.dev/api/oauth/install/login/callback',
     ),
     SAPO_API_MAX_CONCURRENT: Number(raw.SAPO_API_MAX_CONCURRENT ?? 2),
 

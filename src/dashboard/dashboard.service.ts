@@ -44,15 +44,16 @@ type DashboardOverview = {
   recentReviews: Array<{
     id: string; rating: number; author: string; content: string;
     created_at: number; productId: string; productTitle?: string; productImage?: string;
-    status?: string; verified?: boolean; hasReply?: boolean;
+    status?: string; verified?: boolean; hasReply?: boolean; media?: unknown[];
   }>;
   recentQuestions: Array<{
     id: string; question: string; author: string; status?: string;
     answered: boolean; created_at: number; productId: string; productTitle?: string;
   }>;
   rankedProducts: Array<{
-    id: string; title: string; count: number; avg: number;
+    id: string; title: string; image?: string | null; count: number; avg: number;
   }>;
+  lastUpdated?: string;
   reviewTrend: Array<{ date: string; count: number }>;
   attentionProducts: AttentionProduct[];
   productStats: ProductStat[];
@@ -158,7 +159,7 @@ export class DashboardService {
         .filter((p) => p.reviewCount > 0)
         .sort((a, b) => b.reviewCount - a.reviewCount)
         .slice(0, RANKED_LIMIT)
-        .map((p) => ({ id: p.productId, title: p.title, count: p.reviewCount, avg: p.avgRating })),
+        .map((p) => ({ id: p.productId, title: p.title, image: p.image, count: p.reviewCount, avg: p.avgRating })),
       recentReviews: recentReviewItems.map((r) => {
         const label = labelOf(r.productId);
         return {
@@ -173,6 +174,7 @@ export class DashboardService {
           status: r.status,
           verified: r.verified,
           hasReply: !!r.reply,
+          media: Array.isArray(r.media) ? r.media : [],
         };
       }),
       recentQuestions: recentQuestionItems.map((q) => ({
@@ -189,6 +191,7 @@ export class DashboardService {
       attentionProducts: products?.attentionProducts ?? [],
       productStats,
       degraded: [...degraded].sort(),
+      lastUpdated: new Date().toISOString(),
     };
   }
 

@@ -153,10 +153,10 @@ const WebhooksPage = () => {
   const testMutation = useMutation({
     mutationFn: (endpoint) => testOutboundEndpoint(endpoint.id),
     onSuccess: (data) => {
-      if (data?.delivered) {
+      if (data?.delivered || data?.status === "delivered") {
         toast.success(`Đã gửi thử tới ${data.url || "webhook"}`);
       } else {
-        toast.error(data?.error || "Webhook không phản hồi thành công");
+        toast.error(data?.error || data?.lastError || "Webhook không phản hồi thành công");
       }
     },
     onError: (error) => toast.error(getErrorMessage(error, "Gửi thử thất bại")),

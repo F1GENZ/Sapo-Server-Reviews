@@ -236,6 +236,7 @@ export class PublicReviewController {
     }
     const author = optionalText(body.author, 'Author', 100);
     if (!author) throw new BadRequestException('Author is required');
+    if (author.length < 2) throw new BadRequestException('Author must be at least 2 characters');
     const content = optionalText(body.content, 'Content', 2000);
     const title = optionalText(body.title, 'Title', 100);
     const identity = parseIdentity(body);

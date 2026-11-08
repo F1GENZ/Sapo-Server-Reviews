@@ -34,7 +34,7 @@ import type { WidgetConfig } from './interfaces/widget-config.interface';
 import { DEFAULT_WIDGET_CONFIG } from './interfaces/widget-config.interface';
 import type { CreateReviewDto } from './dto/create-review.dto';
 import type { UpdateReviewDto } from './dto/update-review.dto';
-import type { UpdateWidgetConfigDto } from './dto/update-widget-config.dto';
+import { WIDGET_CONFIG_KEYS, type UpdateWidgetConfigDto } from './dto/update-widget-config.dto';
 import type { UpdateSpamConfigDto } from './dto/update-spam-config.dto';
 import { applyFormModes, type PublicIdentity, type PublicReviewInput } from './public-review-input';
 import { UNREPLIED_WHERE } from './review-where';
@@ -140,13 +140,15 @@ const EMPTY_SUMMARY = (): RatingSummary => ({
 const stripUndefined = (value: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined));
 
-const LEGACY_WIDGET_KEYS: readonly string[] = ['emailDisplay', 'phoneDisplay'];
+const ALLOWED_WIDGET_KEYS = new Set<string>(WIDGET_CONFIG_KEYS);
 
 const toWidgetConfig = (saved: unknown): WidgetConfig => {
   const entries = saved && typeof saved === 'object' ? Object.entries(saved) : [];
   return {
     ...DEFAULT_WIDGET_CONFIG,
-    ...(Object.fromEntries(entries.filter(([key]) => !LEGACY_WIDGET_KEYS.includes(key))) as Partial<WidgetConfig>),
+    ...(Object.fromEntries(
+      entries.filter(([key, val]) => ALLOWED_WIDGET_KEYS.has(key) && val !== undefined),
+    ) as Partial<WidgetConfig>),
   };
 };
 
@@ -816,7 +818,7 @@ export class ReviewService {
         author: dto.author !== undefined ? dto.author : existing.author,
         email: dto.email !== undefined ? dto.email : existing.email,
         phone: dto.phone !== undefined ? dto.phone : existing.phone,
-        title: dto.title !== undefined ? dto.title : existing.title,
+        title: dto.title !== undefined ? (dto.title.trim() || null) : existing.title,
         media: toMediaInput(dto.media),
         status: dto.status !== undefined ? dto.status : existing.status,
         verified: dto.verified !== undefined ? dto.verified : existing.verified,
@@ -902,7 +904,8 @@ export class ReviewService {
       const existing = await this.reviewStore.getReview(shopId, productId, reviewId);
       if (!existing) return null;
 
-      const now = Date.now();
+      const normalizedReply = typeof reply === 'string' && reply.trim() ? reply.trim() : null;
+      const now = normalizedReply ? Date.now() : null;
       await this.reviewStore.upsertReview({
         shopId,
         productId,
@@ -916,14 +919,25 @@ export class ReviewService {
         status: existing.status,
         verified: existing.verified,
         pinned: existing.pinned,
-        reply,
+        reply: normalizedReply,
         repliedAt: now,
         sourceRawJson: existing.sourceRawJson,
       });
 
       await this.syncPublicSummary(storeDomain, token, productId);
-      this.emitOutbound(storeDomain, 'review.replied', { productId, reviewId });
-      return toDomainReview({ ...existing, reply, repliedAt: BigInt(now) });
+      if (normalizedReply) {
+        this.emitOutbound(storeDomain, 'review.replied', { productId, reviewId });
+      }
+      const mapped = toDomainReview({
+        ...existing,
+        reply: normalizedReply,
+        repliedAt: now != null ? BigInt(now) : null,
+      });
+      if (normalizedReply === null) {
+        (mapped as unknown as Record<string, unknown>).reply = null;
+        (mapped as unknown as Record<string, unknown>).replied_at = null;
+      }
+      return mapped;
     } finally {
       await this.releaseLock(lock);
     }
@@ -1230,7 +1244,10 @@ export class ReviewService {
     storeDomain: string,
   ): Promise<WidgetConfig> {
     const install = await this.resolveInstall(storeDomain);
-    const patch = stripUndefined(dto as Record<string, unknown>);
+    const rawPatch = stripUndefined(dto as Record<string, unknown>);
+    const patch = Object.fromEntries(
+      Object.entries(rawPatch).filter(([key]) => ALLOWED_WIDGET_KEYS.has(key)),
+    );
     const saved = await mergeInstallMetadataKey(this.prisma, storeDomain, WIDGET_CONFIG_METADATA_KEY, patch);
     if (!saved) throw new ConflictException('App not installed for this store');
     const config = toWidgetConfig(saved);

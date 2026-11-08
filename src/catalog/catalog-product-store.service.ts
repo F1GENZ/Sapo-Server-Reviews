@@ -272,9 +272,20 @@ export class CatalogProductStoreService {
     };
 
     if (search) {
+      const asciiSearch = search
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[đĐ]/g, 'd')
+        .trim();
+      const slugSearch = asciiSearch
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
+        ...(asciiSearch && asciiSearch !== search ? [{ title: { contains: asciiSearch, mode: 'insensitive' as const } }] : []),
         { handle: { contains: search, mode: 'insensitive' } },
+        ...(slugSearch && slugSearch !== search ? [{ handle: { contains: slugSearch, mode: 'insensitive' as const } }] : []),
         { productId: search },
       ];
     }

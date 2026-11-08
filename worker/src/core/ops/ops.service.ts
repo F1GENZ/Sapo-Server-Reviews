@@ -168,7 +168,7 @@ export class OpsService {
         }
         if (rows.length < ORDERS_SYNC_PAGE_SIZE) break;
       }
-      return { ok: true, storeDomain, pages, orders, purchases };
+      return { ok: true, storeDomain, pages, orders, purchases, resolved: purchases, skipped: Math.max(0, orders - purchases) };
     } finally {
       await this.redis.releaseLock(lock).catch(() => false);
     }

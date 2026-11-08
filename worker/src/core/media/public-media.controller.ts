@@ -41,11 +41,15 @@ export class PublicMediaController {
     if (mediaType === 'image' && config.allowImage === false) throw new ForbiddenException('Image upload is disabled');
     if (mediaType === 'video' && config.allowVideo === false) throw new ForbiddenException('Video upload is disabled');
 
+    const productId =
+      body?.productId != null && (typeof body.productId === 'string' || typeof body.productId === 'number')
+        ? String(body.productId).trim()
+        : '';
     const ticket = this.media.createUploadTicket({
       storeDomain,
-      productId: body.productId,
-      contentType: body.contentType,
-      fileSize: body.fileSize,
+      productId,
+      contentType: body?.contentType,
+      fileSize: body?.fileSize,
     });
     return { data: { ticket: ticket.ticket, expiresAt: ticket.expiresAt } };
   }

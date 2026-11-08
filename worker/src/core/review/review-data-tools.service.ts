@@ -72,6 +72,7 @@ const asText = (value: unknown): string =>
   typeof value === 'string' ? value.trim() : typeof value === 'number' ? String(value) : '';
 
 const parseBoolean = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') return value;
   const text = asText(value).toLowerCase();
   if (!text) return null;
   if (['true', '1', 'yes', 'y', 'có'].includes(text)) return true;
@@ -91,18 +92,22 @@ const parseTimestamp = (value: unknown): number | null => {
 };
 
 const parseMedia = (value: unknown): Array<{ url: string; type: 'image' | 'video' }> => {
-  const text = asText(value);
-  if (!text) return [];
   let items: unknown[];
-  if (text.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(text) as unknown;
-      items = Array.isArray(parsed) ? parsed : [];
-    } catch {
-      throw new BadRequestException('media must be a JSON array');
-    }
+  if (Array.isArray(value)) {
+    items = value;
   } else {
-    items = text.split(/[|,\s]+/).filter(Boolean);
+    const text = asText(value);
+    if (!text) return [];
+    if (text.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(text) as unknown;
+        items = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        throw new BadRequestException('media must be a JSON array');
+      }
+    } else {
+      items = text.split(/[|,\s]+/).filter(Boolean);
+    }
   }
   const media: Array<{ url: string; type: 'image' | 'video' }> = [];
   for (const item of items.slice(0, MAX_MEDIA_ITEMS)) {

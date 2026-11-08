@@ -15,7 +15,7 @@ export class UpdateWidgetConfigDto {
   @IsOptional() @IsString() @MaxLength(64) bgAltColor?: string;
   @IsOptional() @IsString() @MaxLength(64) borderColor?: string;
   @IsOptional() @IsString() @MaxLength(64) verifiedColor?: string;
-  @IsOptional() @IsNumber() @Min(0) @Max(64) radius?: number;
+  @IsOptional() @IsNumber() @Min(0) @Max(99) radius?: number;
   @IsOptional() @IsBoolean() autoApprove?: boolean;
   @IsOptional() @IsBoolean() showTitle?: boolean;
   @IsOptional() @IsBoolean() showDate?: boolean;
@@ -44,3 +44,45 @@ export class UpdateWidgetConfigDto {
   @IsOptional() @IsBoolean() curatedSliderEnabled?: boolean;
   @IsOptional() @IsInt() @Min(5) @Max(15) curatedSliderCount?: number;
 }
+
+export const WIDGET_CONFIG_KEYS = [
+  'titleText',
+  'accentColor',
+  'starColor',
+  'starBgColor',
+  'starIconUrl',
+  'textColor',
+  'mutedColor',
+  'bgColor',
+  'bgAltColor',
+  'borderColor',
+  'verifiedColor',
+  'radius',
+  'autoApprove',
+  'showTitle',
+  'showDate',
+  'showFilter',
+  'showSort',
+  'formEmailMode',
+  'formPhoneMode',
+  'formTitleMode',
+  'formContentMode',
+  'reviewLayout',
+  'reviewQnaDisplayMode',
+  'reviewItemsPerPage',
+  'allowImage',
+  'allowVideo',
+  'allowQnA',
+  'qnaDisplayMode',
+  'qnaItemsPerPage',
+  'allowReply',
+  'replyBadgeText',
+  'replyBgColor',
+  'replyBorderColor',
+  'showVerified',
+  'showVerifiedAll',
+  'requireLogin',
+  'requirePurchaseToReview',
+  'curatedSliderEnabled',
+  'curatedSliderCount',
+] as const;

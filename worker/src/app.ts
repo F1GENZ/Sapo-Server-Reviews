@@ -9,6 +9,7 @@ import { ProductsController } from './core/catalog/products.controller';
 import { ShopAuthGuard } from './core/common/guards/shop-auth.guard';
 import { NumericIdPipe } from './core/common/pipes/numeric-id.pipe';
 import { IngressRateLimitService } from './core/common/security/ingress-rate-limit.service';
+import { sanitizePublicResponse } from './core/common/security/public-response';
 import { DashboardController } from './core/dashboard/dashboard.controller';
 import { DashboardService } from './core/dashboard/dashboard.service';
 import { HealthController } from './core/health/health.controller';
@@ -556,7 +557,7 @@ export const createApp = (
   // Sapo OAuth / Auth / Session / Webhooks
   app.get('/api/oauth/install/login', async (c) => {
     const { req, res } = await buildExpressAdapters(c);
-    const out = await sapoController.startLogin(req as never, req.query.storeDomain, req.query.redirect);
+    const out = await sapoController.startLogin(req as never, req.query.storeDomain, req.query.redirect, res as never);
     return finalizeResponse(res, out);
   });
   app.post('/api/oauth/install/login', async (c) => {
@@ -593,12 +594,12 @@ export const createApp = (
   });
   app.get('/api/oauth/install/start', async (c) => {
     const { req, res } = await buildExpressAdapters(c);
-    const out = await sapoController.installStart(req as never, req.query.storeDomain);
+    const out = await sapoController.installStart(req as never, req.query.storeDomain, res as never);
     return finalizeResponse(res, out);
   });
   app.get('/api/oauth/install', async (c) => {
     const { req, res } = await buildExpressAdapters(c);
-    const out = await sapoController.installStart(req as never, req.query.storeDomain || req.query.store);
+    const out = await sapoController.installStart(req as never, req.query.storeDomain || req.query.store, res as never);
     return finalizeResponse(res, out);
   });
   app.get('/api/oauth/install/callback', async (c) => {
@@ -781,7 +782,7 @@ export const createApp = (
       req.query.storeDomain,
     );
     if (storeDomain) await bumpStoreEdgeCache(storeDomain);
-    return finalizeResponse(res, out, 201);
+    return finalizeResponse(res, sanitizePublicResponse(req.path, out), 201);
   });
 
   // Public Media Routes (both /ticket used by storefront widget and /upload-ticket alias)
@@ -904,11 +905,13 @@ export const createApp = (
     app.get(base, async (c) => {
       const { req, res } = await buildExpressAdapters(c);
       await requireShopAuth(req, res);
+      const rawLimit = req.query.limit ?? req.query.pageSize ?? req.query.size;
+      const rawSort = req.query.sort ?? req.query.sortBy;
       const out = await reviewController.listAllReviews(
         parseIntOrDefault(req.query.page, 1),
-        parseIntOrDefault(req.query.limit, 20),
+        parseIntOrDefault(rawLimit, 20),
         req.query.status,
-        req.query.sort,
+        rawSort,
         req.query.productId,
         req.query.search,
         req.query.star,
@@ -1077,11 +1080,13 @@ export const createApp = (
     app.get(base, async (c) => {
       const { req, res } = await buildExpressAdapters(c);
       await requireShopAuth(req, res);
+      const rawLimit = req.query.limit ?? req.query.pageSize ?? req.query.size;
+      const rawSort = req.query.sort ?? req.query.sortBy;
       const out = await qnaController.listAllQuestions(
         parseIntOrDefault(req.query.page, 1),
-        parseIntOrDefault(req.query.limit, 20),
+        parseIntOrDefault(rawLimit, 20),
         req.query.status,
-        req.query.sort,
+        rawSort,
         req.query.productId,
         req.query.search,
         req as never,
@@ -1099,12 +1104,14 @@ export const createApp = (
       const { req, res } = await buildExpressAdapters(c);
       await requireShopAuth(req, res);
       const productId = numericIdPipe.transform(c.req.param('productId'));
+      const rawLimit = req.query.limit ?? req.query.pageSize ?? req.query.size;
+      const rawSort = req.query.sort ?? req.query.sortBy;
       const out = await qnaController.getQuestions(
         productId,
         parseIntOrDefault(req.query.page, 1),
-        parseIntOrDefault(req.query.size || req.query.limit, 20),
+        parseIntOrDefault(rawLimit, 20),
         req.query.status,
-        req.query.sort,
+        rawSort,
         req as never,
       );
       return finalizeResponse(res, out);

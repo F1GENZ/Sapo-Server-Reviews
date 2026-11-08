@@ -65,9 +65,9 @@ export class CreateReviewDto {
   @Type(() => MediaItemDto)
   media?: MediaItemDto[];
 
-  @IsIn(['approved', 'pending', 'hidden'])
+  @IsIn(['approved', 'pending', 'hidden', 'spam'])
   @IsOptional()
-  status?: 'approved' | 'pending' | 'hidden';
+  status?: 'approved' | 'pending' | 'hidden' | 'spam';
 
   @IsBoolean()
   @IsOptional()

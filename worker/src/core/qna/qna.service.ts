@@ -57,8 +57,8 @@ const SEARCH_MAX_LENGTH = 100;
 const ANSWERED_WHERE: Prisma.QnaQuestionWhereInput = { answer: { not: null }, NOT: { answer: '' } };
 const UNANSWERED_WHERE: Prisma.QnaQuestionWhereInput = { OR: [{ answer: null }, { answer: '' }] };
 
-const isQnaPageStatus = (value: unknown): value is QnaPageStatus =>
-  ['all', 'pending', 'hidden', 'answered', 'unanswered'].includes(String(value));
+const isQnaPageStatus = (value: unknown): value is QnaPageStatus | 'approved' =>
+  ['all', 'pending', 'approved', 'hidden', 'answered', 'unanswered'].includes(String(value));
 
 const toDomainQuestion = (row: QnaQuestionRecord): Question => ({
   id: row.questionId,
@@ -231,6 +231,22 @@ export class QnaService {
     const existing = await this.qnaStore.getQuestion(shopId, productId, questionId);
     if (!existing) return null;
 
+    const trimmedAnswer = typeof dto.answer === 'string' ? dto.answer.trim() : undefined;
+    const hasAnswerUpdate = trimmedAnswer !== undefined;
+    const nextAnswer = hasAnswerUpdate ? (trimmedAnswer ? trimmedAnswer : null) : existing.answer;
+    const nextAnsweredBy = hasAnswerUpdate
+      ? (trimmedAnswer ? existing.answeredBy || 'Shop' : null)
+      : existing.answeredBy;
+    const nextAnsweredAt = hasAnswerUpdate
+      ? (trimmedAnswer ? (existing.answeredAt ? Number(existing.answeredAt) : Date.now()) : null)
+      : existing.answeredAt
+        ? Number(existing.answeredAt)
+        : null;
+    const nextStatus =
+      hasAnswerUpdate && trimmedAnswer && existing.status === 'pending'
+        ? 'approved'
+        : existing.status;
+
     const record = await this.qnaStore.upsertQuestion({
       shopId,
       productId,
@@ -239,13 +255,12 @@ export class QnaService {
       author: dto.author !== undefined ? dto.author : existing.author,
       email: existing.email,
       phone: existing.phone,
-      answer: dto.answer !== undefined ? dto.answer : existing.answer,
-      answeredBy: existing.answeredBy,
-      status: existing.status,
-      answeredAt: existing.answeredAt ? Number(existing.answeredAt) : null,
+      answer: nextAnswer,
+      answeredBy: nextAnsweredBy,
+      status: nextStatus,
+      answeredAt: nextAnsweredAt,
       sourceRawJson: existing.sourceRawJson,
     });
-
     return toDomainQuestion(record);
   }
 
@@ -285,7 +300,7 @@ export class QnaService {
   ): Promise<QnaPage> {
     const page = Math.max(1, options.page ?? 1);
     const pageSize = Math.min(ADMIN_MAX_PAGE_SIZE, Math.max(1, options.limit ?? 20));
-    const status: QnaPageStatus = isQnaPageStatus(options.status) ? options.status : 'all';
+    const status = isQnaPageStatus(options.status) ? options.status : 'all';
     const sortBy: QnaPageSort = options.sort === 'oldest' ? 'oldest' : 'newest';
 
     const conditions: Prisma.QnaQuestionWhereInput[] = [{ shopId }];
@@ -410,7 +425,11 @@ export class QnaService {
     if (!product || product.deletedAt) {
       throw new NotFoundException({ code: 'product_not_found', message: 'Product not found' });
     }
-    return this.submitQuestion(storeDomain, productId, dto);
+    const created = await this.submitQuestion(storeDomain, productId, dto);
+    delete created.email;
+    delete created.phone;
+    delete created.source_raw_json;
+    return created;
   }
 
   async getPublicSummary(

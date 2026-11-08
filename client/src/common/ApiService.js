@@ -150,8 +150,9 @@ export const fetchQuestions = async (productId, params = {}) => {
   const res = await httpClient.get(`/api/admin/qna/${productId}`, {
     params: {
       ...rest,
-      size: pageSize,
-      sort: sortBy,
+      limit: pageSize ?? rest.limit ?? rest.size,
+      size: pageSize ?? rest.size ?? rest.limit,
+      sort: sortBy ?? rest.sort,
     },
   });
   return res.data?.data;

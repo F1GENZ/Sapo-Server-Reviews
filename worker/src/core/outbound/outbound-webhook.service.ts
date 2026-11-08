@@ -46,6 +46,9 @@ export type OutboundDeliveryView = {
   deliveredAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  delivered?: boolean;
+  error?: string | null;
+  url?: string;
 };
 
 const toEvents = (value: unknown, allowed: readonly string[]): string[] => {
@@ -280,6 +283,9 @@ export class OutboundWebhookService {
       deliveredAt: row.deliveredAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      delivered: row.status === 'delivered',
+      error: row.lastError ?? null,
+      url: endpoint.url,
     };
   }
 
