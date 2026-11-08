@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { SELF, env } from 'cloudflare:test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionService } from '../src/core/sapo/session.service';
 import { TokenEncryptionService } from '../src/core/sapo/token-encryption.service';
 import { SqliteRedisService } from '../src/db/sqlite-redis';
@@ -23,6 +23,33 @@ const VALID_PNG_BYTES = Buffer.from(
 const readData = async <T>(res: Response): Promise<T> => {
   const json = (await res.json()) as { data: T };
   return json.data;
+};
+
+const TEST_PUBLIC_ADDRESS = '93.184.216.34';
+const PROBE_HOST = 'hook.probe.invalid';
+const DOH_PATH = '/dns-query';
+
+const installControlledExternalFetch = (): void => {
+  const respond = async (request: Request): Promise<Response> => {
+    const url = new URL(request.url);
+    if (url.pathname === DOH_PATH) {
+      const answers = url.searchParams.get('type') === 'A' ? [{ type: 1, data: TEST_PUBLIC_ADDRESS }] : [];
+      return Response.json({ Answer: answers });
+    }
+    if (url.hostname === PROBE_HOST && url.pathname === '/status/200') {
+      return new Response('ok', { status: 200 });
+    }
+    if (url.hostname === PROBE_HOST && url.pathname === '/redirect-to') {
+      const target = url.searchParams.get('url') ?? '';
+      const status = Number(url.searchParams.get('status_code') ?? '302');
+      if (request.redirect === 'manual') {
+        return new Response(null, { status, headers: { Location: target } });
+      }
+      return respond(new Request(target, { redirect: request.redirect }));
+    }
+    throw new Error(`unexpected outbound fetch in test: ${url.href}`);
+  };
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => respond(new Request(input, init)));
 };
 const buildAdminHeaders = (extra: Record<string, string> = {}) => {
   const appEnv = buildAppEnv(testEnv);
@@ -47,6 +74,10 @@ const buildAdminHeaders = (extra: Record<string, string> = {}) => {
 };
 
 describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache + RateLimit)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(async () => {
     const importToken = testEnv.MIGRATION_IMPORT_TOKEN || '';
     expect(importToken.length).toBeGreaterThanOrEqual(24);
@@ -1455,12 +1486,13 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
   });
 
   it('outbound webhook test never surfaces the Workers redirect-mode error', async () => {
+    installControlledExternalFetch();
     const headers = buildAdminHeaders();
     const base = 'https://api-sapo-reviews.f1genz.dev';
     const createRes = await SELF.fetch(`${base}/api/admin/outbound-webhooks`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ url: 'https://httpbin.org/status/200', events: ['review.created'], active: true }),
+      body: JSON.stringify({ url: `https://${PROBE_HOST}/status/200`, events: ['review.created'], active: true }),
     });
     expect(createRes.status).toBe(201);
     const created = await readData<{ endpoint: { id: string } }>(createRes);
@@ -1479,14 +1511,15 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
   });
 
   it('outbound webhook test records a 3xx as a failed delivery and never follows Location', async () => {
+    installControlledExternalFetch();
     const headers = buildAdminHeaders();
     const base = 'https://api-sapo-reviews.f1genz.dev';
-    const target = encodeURIComponent('https://httpbin.org/status/200');
+    const target = encodeURIComponent(`https://${PROBE_HOST}/status/200`);
     const createRes = await SELF.fetch(`${base}/api/admin/outbound-webhooks`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        url: `https://httpbin.org/redirect-to?url=${target}&status_code=302`,
+        url: `https://${PROBE_HOST}/redirect-to?url=${target}&status_code=302`,
         events: ['review.created'],
         active: true,
       }),
