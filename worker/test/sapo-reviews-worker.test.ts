@@ -1460,7 +1460,7 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     const createRes = await SELF.fetch(`${base}/api/admin/outbound-webhooks`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ url: 'https://93.184.216.34/sapo-test', events: ['review.created'], active: true }),
+      body: JSON.stringify({ url: 'https://httpbin.org/status/200', events: ['review.created'], active: true }),
     });
     expect(createRes.status).toBe(201);
     const created = await readData<{ endpoint: { id: string } }>(createRes);
@@ -1470,8 +1470,40 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
       body: '{}',
     });
     expect(testRes.status).toBeLessThan(300);
-    const out = await readData<{ delivered: boolean; status: string; error: string | null }>(testRes);
-    expect(out.error ?? '').not.toMatch(/Invalid redirect value/);
+    const out = await readData<{ delivered: boolean; status: string; responseStatus: number | null; error: string | null }>(testRes);
+    expect(typeof out.delivered).toBe('boolean');
+    expect(out.delivered).toBe(out.status === 'delivered');
+    expect(out.status).toBe('delivered');
+    expect(out.responseStatus).toBe(200);
+    expect(out.error).toBeNull();
+  });
+
+  it('outbound webhook test records a 3xx as a failed delivery and never follows Location', async () => {
+    const headers = buildAdminHeaders();
+    const base = 'https://api-sapo-reviews.f1genz.dev';
+    const target = encodeURIComponent('https://httpbin.org/status/200');
+    const createRes = await SELF.fetch(`${base}/api/admin/outbound-webhooks`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        url: `https://httpbin.org/redirect-to?url=${target}&status_code=302`,
+        events: ['review.created'],
+        active: true,
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = await readData<{ endpoint: { id: string } }>(createRes);
+    const testRes = await SELF.fetch(`${base}/api/admin/outbound-webhooks/${created.endpoint.id}/test`, {
+      method: 'POST',
+      headers,
+      body: '{}',
+    });
+    expect(testRes.status).toBeLessThan(300);
+    const out = await readData<{ delivered: boolean; status: string; responseStatus: number | null; error: string | null }>(testRes);
+    expect(out.delivered).toBe(false);
+    expect(out.status).toBe('failed');
+    expect(out.responseStatus).toBe(302);
+    expect(out.error).toMatch(/^HTTP 302/);
   });
 
   it('storefront assets and the review-widget alias are served with open CORS', async () => {
