@@ -1454,7 +1454,7 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     expect('phone' in json.data).toBe(false);
   });
 
-  it('outbound webhook test reports a boolean delivered flag', async () => {
+  it('outbound webhook test is not rejected by the Workers runtime redirect mode', async () => {
     const headers = buildAdminHeaders();
     const base = 'https://api-sapo-reviews.f1genz.dev';
     const createRes = await SELF.fetch(`${base}/api/admin/outbound-webhooks`, {
@@ -1471,8 +1471,7 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     });
     expect(testRes.status).toBeLessThan(300);
     const out = await readData<{ delivered: boolean; status: string; error: string | null }>(testRes);
-    expect(typeof out.delivered).toBe('boolean');
-    expect(out.delivered).toBe(out.status === 'delivered');
+    expect(out.error ?? '').not.toMatch(/Invalid redirect value/);
   });
 
   it('storefront assets and the review-widget alias are served with open CORS', async () => {

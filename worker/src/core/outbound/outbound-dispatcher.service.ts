@@ -137,9 +137,10 @@ export class OutboundDispatcherService {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), OUTBOUND_TIMEOUT_MS);
     try {
+      // Workers rejects redirect:'error'; a 3xx must fail delivery, never be followed.
       const response = await fetch(url, {
         method: 'POST',
-        redirect: 'error',
+        redirect: 'manual',
         signal: controller.signal,
         headers: {
           'content-type': 'application/json',
