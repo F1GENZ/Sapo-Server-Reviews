@@ -166,7 +166,7 @@ export const serveStorefrontWithEdgeCache = async (
     const cached = await cache.match(cacheKey);
     if (cached) {
       const headers = new Headers(cached.headers);
-      headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      headers.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
       headers.set('X-Edge-Cache', 'HIT');
       return new Response(cached.body, { status: cached.status, headers });
     }
@@ -191,7 +191,7 @@ export const serveStorefrontWithEdgeCache = async (
   }
 
   const outHeaders = new Headers(upstream.headers);
-  outHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  outHeaders.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
   outHeaders.set('X-Edge-Cache', 'MISS');
   return new Response(bytes, { status: 200, headers: outHeaders });
 };

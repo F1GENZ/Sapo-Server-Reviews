@@ -102,7 +102,11 @@ export class PublicReviewController {
     }
   }
 
-  private extractStoreDomain(header?: string, query?: string): string {
+  private extractStoreDomain(header?: string, query?: string, allowBareHeader = true): string {
+    const rawHeader = (header || '').trim();
+    if (rawHeader && !allowBareHeader && !rawHeader.replace(/^https?:\/\//i, '').includes('.')) {
+      throw new BadRequestException('Invalid store domain');
+    }
     const domain = normalizeStoreDomainCandidate(header || query || '');
     if (!domain) throw new BadRequestException('Missing store domain');
     if (!STORE_DOMAIN_RE.test(domain)) {
@@ -220,7 +224,7 @@ export class PublicReviewController {
     @Headers('x-store-domain') storeDomainHeader?: string,
     @Query('storeDomain') storeDomainQuery?: string,
   ) {
-    const storeDomain = this.extractStoreDomain(storeDomainHeader, storeDomainQuery);
+    const storeDomain = this.extractStoreDomain(storeDomainHeader, storeDomainQuery, false);
     await this.assertPublicRate(req, storeDomain, 'public-review:submit');
     if (!body || typeof body !== 'object') {
       throw new BadRequestException('Request body is required');

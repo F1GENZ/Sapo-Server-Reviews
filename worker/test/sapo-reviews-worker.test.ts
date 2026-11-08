@@ -379,6 +379,7 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     const sumRes1 = await SELF.fetch(summaryUrl);
     expect(sumRes1.status).toBe(200);
     expect(sumRes1.headers.get('X-Edge-Cache')).toBe('MISS');
+    expect(sumRes1.headers.get('Cache-Control')).toBe('public, max-age=0, s-maxage=60, stale-while-revalidate=300');
     const sumBody1 = (await sumRes1.json()) as { data: { avg: number; count: number; distribution: Record<string, number> } };
     expect(sumBody1.data.count).toBe(1);
     expect(sumBody1.data.avg).toBe(5);
@@ -386,7 +387,7 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     const sumRes2 = await SELF.fetch(summaryUrl);
     expect(sumRes2.status).toBe(200);
     expect(sumRes2.headers.get('X-Edge-Cache')).toBe('HIT');
-
+    expect(sumRes2.headers.get('Cache-Control')).toBe('public, max-age=0, s-maxage=60, stale-while-revalidate=300');
     // 2. Batch summaries
     const batchRes = await SELF.fetch(
       `https://api-sapo-reviews.f1genz.dev/api/public/reviews/summaries?productIds=${PRODUCT_ID},${PRODUCT_ID_2}&store=${STORE_DOMAIN}`,

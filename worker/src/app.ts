@@ -143,7 +143,10 @@ const buildExpressAdapters = async (
       headersObj['x-store'] ||
       headersObj['x-shop'];
     if (headerAlias) {
-      headersObj['x-store-domain'] = normalizePublicStoreDomain(headerAlias);
+      headersObj['x-store-domain'] =
+        c.req.method === 'GET' || c.req.method === 'HEAD' || headerAlias.includes('.')
+          ? normalizePublicStoreDomain(headerAlias)
+          : headerAlias.trim().toLowerCase();
     }
     const queryAlias =
       queryObj.storeDomain ||
