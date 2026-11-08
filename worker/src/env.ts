@@ -57,7 +57,6 @@ export interface WorkerEnv {
   READINESS_TOKEN?: string;
   MIGRATION_IMPORT_TOKEN?: string;
   BUILD_SHA?: string;
-  GEMINI_API_KEY?: string;
   AI_MODEL?: string;
 }
 
@@ -131,7 +130,6 @@ export const buildAppEnv = (raw: WorkerEnv): AppEnv => {
     READINESS_TOKEN: String(raw.READINESS_TOKEN ?? ''),
     BUILD_SHA: String(raw.BUILD_SHA ?? 'cloudflare-worker'),
 
-    GEMINI_API_KEY: String(raw.GEMINI_API_KEY ?? ''),
-    AI_MODEL: String(raw.AI_MODEL ?? 'gemini-2.5-flash'),
+    AI_MODEL: String(raw.AI_MODEL ?? '@cf/meta/llama-3.1-8b-instruct-fast'),
   };
 };

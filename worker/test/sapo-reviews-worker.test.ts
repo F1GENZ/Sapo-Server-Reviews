@@ -1151,16 +1151,33 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     const afterDeleteGet = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/media/file/${key}`);
     expect(afterDeleteGet.status).toBe(404);
 
-    // 7. Verify AI status includes fallbackModel=@cf/meta/llama-3.1-8b-instruct-fast
+    // 7. Verify AI status includes configured=true, workersAi=true, provider=workers-ai, model=@cf/meta/llama-3.1-8b-instruct-fast
     const aiStatusRes = await SELF.fetch('https://api-sapo-reviews.f1genz.dev/api/admin/ai/status', { headers });
     expect(aiStatusRes.status).toBe(200);
     const aiStatusJson = (await aiStatusRes.json()) as {
+      configured: boolean;
+      workersAi: boolean;
+      provider: string;
+      model: string;
       fallbackModel: string;
-      data: { fallbackModel: string };
+      data: {
+        configured: boolean;
+        workersAi: boolean;
+        provider: string;
+        model: string;
+        fallbackModel: string;
+      };
     };
+    expect(aiStatusJson.configured).toBe(true);
+    expect(aiStatusJson.workersAi).toBe(true);
+    expect(aiStatusJson.provider).toBe('workers-ai');
+    expect(aiStatusJson.model).toBe('@cf/meta/llama-3.1-8b-instruct-fast');
     expect(aiStatusJson.fallbackModel).toBe('@cf/meta/llama-3.1-8b-instruct-fast');
+    expect(aiStatusJson.data.configured).toBe(true);
+    expect(aiStatusJson.data.workersAi).toBe(true);
+    expect(aiStatusJson.data.provider).toBe('workers-ai');
+    expect(aiStatusJson.data.model).toBe('@cf/meta/llama-3.1-8b-instruct-fast');
     expect(aiStatusJson.data.fallbackModel).toBe('@cf/meta/llama-3.1-8b-instruct-fast');
-
     // 8. Verify Queue consumer batching by storeDomain & Edge Cache invalidation
     await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${STORE_DOMAIN}`);
     const beforeQueueHit = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${STORE_DOMAIN}`);

@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env.schema';
 import { IngressRateLimitService } from '../common/security/ingress-rate-limit.service';
@@ -6,7 +6,9 @@ import { IngressRateLimitService } from '../common/security/ingress-rate-limit.s
 export const AI_REPLY_RATE_WINDOW_SECONDS = 3600;
 export const AI_REPLY_RATE_MAX = 30;
 export const AI_TIMEOUT_MS = 15_000;
-export const WORKERS_AI_FALLBACK_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
+export const WORKERS_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
+export const WORKERS_AI_FALLBACK_MODEL = WORKERS_AI_MODEL;
+export const WORKERS_AI_BINDING = 'WORKERS_AI_BINDING';
 const MAX_SUGGESTION_LENGTH = 600;
 
 export type WorkersAiBinding = {
@@ -51,11 +53,11 @@ export class AiService {
   constructor(
     @Inject(APP_ENV) private readonly env: AppEnv,
     private readonly rateLimit: IngressRateLimitService,
-    private readonly workersAi?: WorkersAiBinding | null,
+    @Optional() @Inject(WORKERS_AI_BINDING) private readonly workersAi?: WorkersAiBinding | null,
   ) {}
 
   get configured(): boolean {
-    return Boolean(this.env.GEMINI_API_KEY);
+    return Boolean(this.workersAi);
   }
 
   get workersAiAvailable(): boolean {
@@ -63,7 +65,7 @@ export class AiService {
   }
 
   get model(): string {
-    return this.env.AI_MODEL;
+    return this.env.AI_MODEL || WORKERS_AI_MODEL;
   }
 
   private extractWorkersAiText(raw: unknown): string {
@@ -81,18 +83,22 @@ export class AiService {
     return '';
   }
 
-  private async suggestReplyWithWorkersAi(
-    storeDomain: string,
-    input: ReplySuggestionInput,
-  ): Promise<{ suggestion: string; model: string }> {
+  async suggestReply(storeDomain: string, input: ReplySuggestionInput): Promise<{ suggestion: string; model: string }> {
     if (!this.workersAi) {
       throw new ServiceUnavailableException({
         code: 'ai_not_configured',
-        message: 'AI chưa được cấu hình cho ứng dụng này (thiếu GEMINI_API_KEY)',
+        message: 'AI chưa được cấu hình cho ứng dụng này (thiếu Workers AI binding)',
       });
     }
+    await this.rateLimit.assertAllowed(
+      'ai:reply-suggestion',
+      storeDomain,
+      AI_REPLY_RATE_WINDOW_SECONDS,
+      AI_REPLY_RATE_MAX,
+    );
+
     try {
-      const result = await this.workersAi.run(WORKERS_AI_FALLBACK_MODEL, {
+      const result = await this.workersAi.run(this.model, {
         messages: [
           {
             role: 'system',
@@ -112,80 +118,13 @@ export class AiService {
       if (!suggestion) {
         throw new ServiceUnavailableException({ code: 'ai_empty', message: 'AI không trả về nội dung' });
       }
-      return { suggestion, model: WORKERS_AI_FALLBACK_MODEL };
+      return { suggestion, model: this.model };
     } catch (error) {
       if (error instanceof ServiceUnavailableException) throw error;
       this.logger.warn(
         `Workers AI reply suggestion failed for ${storeDomain}: ${error instanceof Error ? error.message : 'unknown error'}`,
       );
       throw new ServiceUnavailableException({ code: 'ai_unavailable', message: 'Dịch vụ AI tạm thời không khả dụng' });
-    }
-  }
-
-  async suggestReply(storeDomain: string, input: ReplySuggestionInput): Promise<{ suggestion: string; model: string }> {
-    if (!this.configured && !this.workersAiAvailable) {
-      throw new ServiceUnavailableException({
-        code: 'ai_not_configured',
-        message: 'AI chưa được cấu hình cho ứng dụng này (thiếu GEMINI_API_KEY)',
-      });
-    }
-    await this.rateLimit.assertAllowed(
-      'ai:reply-suggestion',
-      storeDomain,
-      AI_REPLY_RATE_WINDOW_SECONDS,
-      AI_REPLY_RATE_MAX,
-    );
-
-    if (input.provider === 'workers-ai' || !this.configured) {
-      return this.suggestReplyWithWorkersAi(storeDomain, input);
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`,
-        {
-          method: 'POST',
-          signal: controller.signal,
-          headers: { 'content-type': 'application/json', 'x-goog-api-key': this.env.GEMINI_API_KEY },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: buildPrompt(input) }] }],
-            generationConfig: { temperature: 0.6, maxOutputTokens: 320 },
-          }),
-        },
-      );
-      if (!response.ok) {
-        this.logger.warn(`AI provider answered ${response.status} for ${storeDomain}`);
-        if (this.workersAiAvailable) {
-          return await this.suggestReplyWithWorkersAi(storeDomain, input);
-        }
-        throw new ServiceUnavailableException({ code: 'ai_unavailable', message: 'Dịch vụ AI tạm thời không khả dụng' });
-      }
-      const payload = (await response.json()) as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: unknown }> } }>;
-      };
-      const text = (payload.candidates ?? [])
-        .flatMap((candidate) => candidate.content?.parts ?? [])
-        .map((part) => (typeof part.text === 'string' ? part.text : ''))
-        .join(' ');
-      const suggestion = stripMarkup(text).slice(0, MAX_SUGGESTION_LENGTH);
-      if (!suggestion) {
-        if (this.workersAiAvailable) {
-          return await this.suggestReplyWithWorkersAi(storeDomain, input);
-        }
-        throw new ServiceUnavailableException({ code: 'ai_empty', message: 'AI không trả về nội dung' });
-      }
-      return { suggestion, model: this.model };
-    } catch (error) {
-      if (this.workersAiAvailable) {
-        return await this.suggestReplyWithWorkersAi(storeDomain, input);
-      }
-      if (error instanceof ServiceUnavailableException) throw error;
-      this.logger.warn(`AI reply suggestion failed for ${storeDomain}: ${error instanceof Error ? error.message : 'unknown error'}`);
-      throw new ServiceUnavailableException({ code: 'ai_unavailable', message: 'Dịch vụ AI tạm thời không khả dụng' });
-    } finally {
-      clearTimeout(timer);
     }
   }
 }

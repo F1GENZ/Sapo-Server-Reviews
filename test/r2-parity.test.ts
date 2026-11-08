@@ -333,10 +333,10 @@ test('dispatcher refuses an endpoint that resolves to a private address without 
   }
 });
 
-test('AI reply suggestion is refused with 503 when no key is configured', async () => {
-  const env = cast<AppEnv>({ GEMINI_API_KEY: '', AI_MODEL: 'gemini-2.5-flash', NODE_ENV: 'test' });
+test('AI reply suggestion is refused with 503 when no Workers AI binding is configured', async () => {
+  const env = cast<AppEnv>({ AI_MODEL: '@cf/meta/llama-3.1-8b-instruct-fast', NODE_ENV: 'test' });
   const rateLimit = { assertAllowed: async () => undefined };
-  const service = new AiService(env, cast<IngressRateLimitService>(rateLimit));
+  const service = new AiService(env, cast<IngressRateLimitService>(rateLimit), null);
   assert.equal(service.configured, false);
   await assert.rejects(
     () => service.suggestReply('demo.mysapo.net', { content: 'Tot', rating: 5 }),
@@ -344,22 +344,25 @@ test('AI reply suggestion is refused with 503 when no key is configured', async 
   );
 });
 
-test('AI reply suggestion sanitises markup and caps the length', async () => {
-  const env = cast<AppEnv>({ GEMINI_API_KEY: 'key', AI_MODEL: 'gemini-2.5-flash', NODE_ENV: 'test' });
+test('AI reply suggestion sanitises markup and caps the length via Workers AI', async () => {
+  const env = cast<AppEnv>({ AI_MODEL: '@cf/meta/llama-3.1-8b-instruct-fast', NODE_ENV: 'test' });
   const charged: string[] = [];
   const rateLimit = { assertAllowed: async (bucket: string) => { charged.push(bucket); } };
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () => new Response(JSON.stringify({
-    candidates: [{ content: { parts: [{ text: '<b>Cảm ơn</b> bạn   đã ủng hộ shop!' }] } }],
-  }), { status: 200 })) as typeof fetch;
-  try {
-    const service = new AiService(env, cast<IngressRateLimitService>(rateLimit));
-    const result = await service.suggestReply('demo.mysapo.net', { content: 'Tot', rating: 5, author: 'An' });
-    assert.equal(result.suggestion, 'Cảm ơn bạn đã ủng hộ shop!');
-    assert.deepEqual(charged, ['ai:reply-suggestion']);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  const aiCalls: Array<{ model: string; inputs: Record<string, unknown> }> = [];
+  const workersAi = {
+    run: async (model: string, inputs: Record<string, unknown>) => {
+      aiCalls.push({ model, inputs });
+      return { response: '<b>Cảm ơn</b> bạn   đã ủng hộ shop!' };
+    },
+  };
+  const service = new AiService(env, cast<IngressRateLimitService>(rateLimit), workersAi);
+  assert.equal(service.configured, true);
+  const result = await service.suggestReply('demo.mysapo.net', { content: 'Tot', rating: 5, author: 'An' });
+  assert.equal(result.suggestion, 'Cảm ơn bạn đã ủng hộ shop!');
+  assert.equal(result.model, '@cf/meta/llama-3.1-8b-instruct-fast');
+  assert.equal(aiCalls.length, 1);
+  assert.equal(aiCalls[0].model, '@cf/meta/llama-3.1-8b-instruct-fast');
+  assert.deepEqual(charged, ['ai:reply-suggestion']);
 });
 
 test('slider payload serves the compact contract: pinned then rating, image-only thumbnail, capped content', () => {

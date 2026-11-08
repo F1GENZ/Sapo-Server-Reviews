@@ -51,7 +51,6 @@ export type AppEnv = {
   READINESS_TOKEN: string;
   BUILD_SHA: string;
 
-  GEMINI_API_KEY: string;
   AI_MODEL: string;
 };
 
@@ -195,8 +194,7 @@ export const loadEnv = (env: RawEnv = process.env): AppEnv => {
     REQUEST_BODY_LIMIT: trim(env.REQUEST_BODY_LIMIT) || '1mb',
     WEBHOOK_BODY_LIMIT: trim(env.WEBHOOK_BODY_LIMIT) || '256kb',
 
-    GEMINI_API_KEY: trim(env.GEMINI_API_KEY),
-    AI_MODEL: trim(env.AI_MODEL) || 'gemini-2.5-flash',
+    AI_MODEL: trim(env.AI_MODEL) || '@cf/meta/llama-3.1-8b-instruct-fast',
 
     SAPO_CLIENT_ID: trim(env.SAPO_CLIENT_ID),
     SAPO_CLIENT_SECRET: trim(env.SAPO_CLIENT_SECRET),

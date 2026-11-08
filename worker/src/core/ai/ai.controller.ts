@@ -29,17 +29,19 @@ export class AiController {
 
   @Get('status')
   status() {
-    const configured = Boolean(this.ai.configured || this.ai.workersAiAvailable);
     const workersAi = this.ai.workersAiAvailable;
+    const configured = workersAi;
     return {
       configured,
-      model: this.ai.model,
       workersAi,
+      provider: 'workers-ai',
+      model: this.ai.model,
       fallbackModel: WORKERS_AI_FALLBACK_MODEL,
       data: {
         configured,
-        model: this.ai.model,
         workersAi,
+        provider: 'workers-ai',
+        model: this.ai.model,
         fallbackModel: WORKERS_AI_FALLBACK_MODEL,
       },
     };

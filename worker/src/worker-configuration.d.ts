@@ -30,7 +30,7 @@ interface __BaseEnv_Env {
 	WEBHOOK_RATE_LIMIT_WINDOW_SECONDS: "60";
 	WEBHOOK_RATE_LIMIT_MAX: "300";
 	WEBHOOK_AUTO_SUBSCRIBE: "true";
-	AI_MODEL: "gemini-2.5-flash";
+	AI_MODEL: "@cf/meta/llama-3.1-8b-instruct-fast";
 	STORE_DO: DurableObjectNamespace<import("./index").StoreDO>;
 	STORE: DurableObjectNamespace<import("./index").StoreDO>;
 	AI?: Ai;
