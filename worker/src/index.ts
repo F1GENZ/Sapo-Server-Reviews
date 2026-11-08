@@ -339,20 +339,12 @@ export default {
         normalizeStoreHeader(request);
       if (targetStore) {
         await bumpStoreEdgeCache(targetStore);
-        if (env.EVENTS_QUEUE && env.NODE_ENV === 'production') {
-          const isWebhook = url.pathname === '/api/webhooks/sapo' || url.pathname === '/api/oauth/install/webhooks';
-          void env.EVENTS_QUEUE.send({
-            kind: isWebhook ? 'webhook.process' : 'outbound.deliver',
-            storeDomain: targetStore,
-            timestamp: Date.now(),
-          }).catch(() => undefined);
-        }
       }
     }
     return recordSapoAnalytics(env, request, url.pathname, response, startMs);
   },
-  async queue(batch: MessageBatch<unknown>, env: WorkerEnv, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(handleSapoQueue(batch, env));
+  async queue(batch: MessageBatch<unknown>, env: WorkerEnv): Promise<void> {
+    await handleSapoQueue(batch, env);
   },
 } satisfies ExportedHandler<WorkerEnv>;
 

@@ -1200,5 +1200,43 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
 
     const afterQueueMiss = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${STORE_DOMAIN}`);
     expect(afterQueueMiss.headers.get('X-Edge-Cache')).toBe('MISS');
+
+    let retried = 0;
+    let failedAcked = 0;
+    const failingSapoEnv = {
+      ...testEnv,
+      STORE_DO: {
+        idFromName: (name: string) => testEnv.STORE_DO!.idFromName(name),
+        get: () => ({
+          processQueuedBatch: async () => {
+            throw new Error('simulated Sapo StoreDO failure');
+          },
+        }),
+      },
+    } as unknown as WorkerEnv;
+    await handleSapoQueue(
+      {
+        queue: 'f1genz-sapo-reviews-events-queue',
+        messages: [
+          {
+            id: 'sm-fail-1',
+            timestamp: new Date(),
+            attempts: 1,
+            body: { kind: 'webhook.process', storeDomain: STORE_DOMAIN },
+            ack: () => {
+              failedAcked += 1;
+            },
+            retry: () => {
+              retried += 1;
+            },
+          },
+        ],
+        ackAll: () => undefined,
+        retryAll: () => undefined,
+      } as unknown as MessageBatch<unknown>,
+      failingSapoEnv,
+    );
+    expect(failedAcked).toBe(0);
+    expect(retried).toBe(1);
   });
 });
