@@ -1,4 +1,4 @@
-name: Deploy Sapo Reviews API to VPS
+name: Verify Sapo Reviews API & Worker (VPS Deploy Retired)
 
 on:
   push:
@@ -11,8 +11,6 @@ permissions:
 
 concurrency:
   group: sapo-reviews-api-deploy
-  # A cancelled deploy can stop between the source rsync and the PM2 reload,
-  # leaving the running build behind the sources; queue instead of cancelling.
   cancel-in-progress: false
 
 jobs:
@@ -91,61 +89,3 @@ jobs:
         working-directory: worker
         run: npm run typecheck && npm test
 
-  deploy:
-    name: Deploy API via SSH (Retired - Cloudflare Worker Cutover)
-    runs-on: ubuntu-latest
-    needs: [verify-server, verify-client, verify-worker, e2e]
-    if: false
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout latest commit
-        uses: actions/checkout@v4
-
-      - name: Prepare deploy metadata
-        run: |
-          printf "%s\n" "${GITHUB_SHA}" > DEPLOY_COMMIT
-
-      - name: Setup SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Pin VPS host key
-        env:
-          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
-        run: |
-          test -n "$VPS_KNOWN_HOSTS"
-          mkdir -p ~/.ssh
-          printf '%s\n' "$VPS_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-
-      - name: Upload checked-out source to VPS
-        env:
-          VPS_TARGET: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
-        run: |
-          # The deploy key's forced command anchors rsync at the app directory,
-          # so the remote path is the directory root.
-          rsync -az --delete \
-            --exclude ".git/" \
-            --exclude ".git-nested/" \
-            --exclude ".github/" \
-            --exclude ".antigravity/" \
-            --exclude ".claude/" \
-            --exclude ".env" \
-            --exclude "client/" \
-            --exclude "plans/" \
-            --exclude "recipes/" \
-            --exclude "node_modules/" \
-            --exclude "dist/" \
-            --exclude "dist.next/" \
-            --exclude "dist.prev/" \
-            ./ "${VPS_TARGET}:/"
-
-      - name: Install, migrate, build, swap, and reload PM2
-        env:
-          VPS_TARGET: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
-          APP_DIR: ${{ secrets.APP_DIR }}
-        run: |
-          # The forced command only runs scripts/remote-deploy.sh, and only when
-          # the directory passed here is the one it is bound to.
-          ssh "$VPS_TARGET" "deploy $APP_DIR"
