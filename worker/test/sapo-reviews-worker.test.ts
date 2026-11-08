@@ -1454,7 +1454,7 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     expect('phone' in json.data).toBe(false);
   });
 
-  it('outbound webhook test is not rejected by the Workers runtime redirect mode', async () => {
+  it('outbound webhook test never surfaces the Workers redirect-mode error', async () => {
     const headers = buildAdminHeaders();
     const base = 'https://api-sapo-reviews.f1genz.dev';
     const createRes = await SELF.fetch(`${base}/api/admin/outbound-webhooks`, {
