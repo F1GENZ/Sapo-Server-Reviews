@@ -5,7 +5,8 @@ const EDGE_CACHE_ORIGIN = 'https://edge-cache.f1genz.internal';
 const PUBLIC_CACHE_TTL_SECONDS = 60;
 const PUBLIC_CACHE_SWR_SECONDS = 300;
 const EPOCH_CACHE_TTL_SECONDS = 86_400;
-
+export const MEDIA_IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+const SAPO_MEDIA_KEY_RE = /^reviews\/([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.mysapo\.net)\/\d{1,20}\/[A-Za-z0-9_-]{16,64}\.(jpg|png|webp|mp4)$/;
 const localEpochs = new Map<string, number>();
 
 const writeRemoteStoreEpoch = async (key: string, next: number): Promise<void> => {
@@ -194,4 +195,167 @@ export const serveStorefrontWithEdgeCache = async (
   outHeaders.set('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
   outHeaders.set('X-Edge-Cache', 'MISS');
   return new Response(bytes, { status: 200, headers: outHeaders });
+};
+
+export const buildSapoMediaEdgeCacheKey = (key: string): Request =>
+  new Request(`${EDGE_CACHE_ORIGIN}/sapo-reviews-media/${key.replace(/^\/+/, '')}`, { method: 'GET' });
+
+export const evictSapoMediaEdgeCache = async (keys: readonly string[]): Promise<void> => {
+  const cache = typeof caches !== 'undefined' ? (caches as unknown as { default?: Cache }).default ?? null : null;
+  if (!cache || keys.length === 0) return;
+  await Promise.all(
+    keys.map(async (rawKey) => {
+      const cleanKey = rawKey.replace(/^\/+/, '');
+      if (!cleanKey) return;
+      try {
+        await cache.delete(buildSapoMediaEdgeCacheKey(cleanKey));
+      } catch {
+        // Best-effort cache eviction.
+      }
+    }),
+  );
+};
+
+const etagMatches = (ifNoneMatchHeader: string | null, etag: string | null): boolean => {
+  if (!ifNoneMatchHeader || !etag) return false;
+  const trimmed = ifNoneMatchHeader.trim();
+  if (trimmed === '*') return true;
+  const normalizeTag = (t: string): string => t.trim().replace(/^W\//i, '').replace(/^"|"$/g, '');
+  const target = normalizeTag(etag);
+  if (!target) return false;
+  return trimmed.split(',').some((candidate) => normalizeTag(candidate) === target);
+};
+
+export const isValidSapoMediaKey = (rawKey: string): boolean => SAPO_MEDIA_KEY_RE.test(rawKey.replace(/^\/+/, ''));
+
+export const serveSapoMediaWithEdgeCache = async (
+  request: Request,
+  bucket: R2Bucket | undefined,
+  rawKey: string,
+): Promise<Response> => {
+  const key = rawKey.replace(/^\/+/, '');
+  if (!key || !SAPO_MEDIA_KEY_RE.test(key)) {
+    return new Response(
+      JSON.stringify({ message: 'Media not found', error: 'Not Found', statusCode: 404 }),
+      {
+        status: 404,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Edge-Cache': 'MISS',
+        },
+      },
+    );
+  }
+
+  const cache = typeof caches !== 'undefined' ? (caches as unknown as { default?: Cache }).default ?? null : null;
+  const cacheKey = buildSapoMediaEdgeCacheKey(key);
+  const ifNoneMatch = request.headers.get('if-none-match');
+
+  if (cache) {
+    try {
+      const cached = await cache.match(cacheKey);
+      if (cached) {
+        const etag = cached.headers.get('ETag') || '';
+        if (etagMatches(ifNoneMatch, etag)) {
+          return new Response(null, {
+            status: 304,
+            headers: {
+              ETag: etag,
+              'Cache-Control': MEDIA_IMMUTABLE_CACHE_CONTROL,
+              'X-Content-Type-Options': 'nosniff',
+              'X-Edge-Cache': 'HIT',
+            },
+          });
+        }
+        const headers = new Headers(cached.headers);
+        headers.set('Cache-Control', MEDIA_IMMUTABLE_CACHE_CONTROL);
+        headers.set('X-Content-Type-Options', 'nosniff');
+        headers.set('X-Edge-Cache', 'HIT');
+        return new Response(request.method === 'HEAD' ? null : cached.body, {
+          status: 200,
+          headers,
+        });
+      }
+    } catch {
+      // Fallback to R2 on cache read error.
+    }
+  }
+
+  if (!bucket) {
+    return new Response(
+      JSON.stringify({ message: 'Media not found', error: 'Not Found', statusCode: 404 }),
+      {
+        status: 404,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Edge-Cache': 'MISS',
+        },
+      },
+    );
+  }
+
+  const object = await bucket.get(key);
+  if (!object) {
+    return new Response(
+      JSON.stringify({ message: 'Media not found', error: 'Not Found', statusCode: 404 }),
+      {
+        status: 404,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Edge-Cache': 'MISS',
+        },
+      },
+    );
+  }
+
+  const contentType = object.httpMetadata?.contentType || 'application/octet-stream';
+  const etag = object.httpEtag || `"${object.etag}"`;
+  const bytes = await object.arrayBuffer();
+
+  if (cache) {
+    try {
+      await cache.put(
+        cacheKey,
+        new Response(bytes.slice(0), {
+          status: 200,
+          headers: {
+            'Content-Type': contentType,
+            'Cache-Control': MEDIA_IMMUTABLE_CACHE_CONTROL,
+            ETag: etag,
+          },
+        }),
+      );
+    } catch {
+      // Ignore cache write errors.
+    }
+  }
+
+  if (etagMatches(ifNoneMatch, etag)) {
+    return new Response(null, {
+      status: 304,
+      headers: {
+        ETag: etag,
+        'Cache-Control': MEDIA_IMMUTABLE_CACHE_CONTROL,
+        'X-Content-Type-Options': 'nosniff',
+        'X-Edge-Cache': 'MISS',
+      },
+    });
+  }
+
+  return new Response(request.method === 'HEAD' ? null : bytes, {
+    status: 200,
+    headers: {
+      'Content-Type': contentType,
+      'Cache-Control': MEDIA_IMMUTABLE_CACHE_CONTROL,
+      ETag: etag,
+      'X-Content-Type-Options': 'nosniff',
+      'X-Edge-Cache': 'MISS',
+    },
+  });
 };

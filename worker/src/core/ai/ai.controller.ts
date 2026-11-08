@@ -11,7 +11,7 @@ import {
 import { ShopAuthGuard } from '../common/guards/shop-auth.guard';
 import { STORE_DOMAIN_RE } from '../common/security/public-limits';
 import { ReplySuggestionDto } from './ai.dto';
-import { AiService } from './ai.service';
+import { AiService, WORKERS_AI_FALLBACK_MODEL } from './ai.service';
 
 type AuthRequest = { storeDomain?: string };
 
@@ -29,7 +29,20 @@ export class AiController {
 
   @Get('status')
   status() {
-    return { data: { configured: this.ai.configured, model: this.ai.model } };
+    const configured = Boolean(this.ai.configured || this.ai.workersAiAvailable);
+    const workersAi = this.ai.workersAiAvailable;
+    return {
+      configured,
+      model: this.ai.model,
+      workersAi,
+      fallbackModel: WORKERS_AI_FALLBACK_MODEL,
+      data: {
+        configured,
+        model: this.ai.model,
+        workersAi,
+        fallbackModel: WORKERS_AI_FALLBACK_MODEL,
+      },
+    };
   }
 
   @Post('reply-suggestion')

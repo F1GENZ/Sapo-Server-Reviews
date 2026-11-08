@@ -62,6 +62,7 @@ export interface AppContainer {
   sapoService: SapoService;
   webhookService: WebhookService;
   durabilitySweep: DurabilitySweepService;
+  mediaService: WorkerMediaService;
 }
 
 interface ExpressReqLike {
@@ -392,7 +393,7 @@ export const createApp = (
     mediaService,
     outboundDispatcher,
   );
-  const aiService = new AiService(env, rateLimit);
+  const aiService = new AiService(env, rateLimit, workerEnv.AI ?? null);
 
   const reflector = new Reflector();
   const shopAuthGuard = new ShopAuthGuard(env, sessionService, sapoService, reflector);
@@ -1332,6 +1333,7 @@ export const createApp = (
       sapoService,
       webhookService,
       durabilitySweep,
+      mediaService,
     },
   };
 };

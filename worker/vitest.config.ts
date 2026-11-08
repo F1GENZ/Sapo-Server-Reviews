@@ -32,6 +32,7 @@ const fallbackBindings: Record<string, string> = {
 export default defineConfig({
   plugins: [
     cloudflareTest({
+      remoteBindings: false,
       wrangler: { configPath: './wrangler.jsonc' },
       miniflare: {
         compatibilityDate: '2026-10-01',

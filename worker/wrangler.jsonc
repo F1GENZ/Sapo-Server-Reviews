@@ -40,6 +40,29 @@
   "r2_buckets": [
     { "binding": "MEDIA_BUCKET", "bucket_name": "f1genz-sapo-reviews-media" }
   ],
+  "ai": { "binding": "AI" },
+  "analytics_engine_datasets": [
+    {
+      "binding": "ANALYTICS",
+      "dataset": "f1genz_fleet_metrics"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "EVENTS_QUEUE",
+        "queue": "f1genz-sapo-reviews-events-queue"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "f1genz-sapo-reviews-events-queue",
+        "max_batch_size": 20,
+        "max_batch_timeout": 5,
+        "max_retries": 3
+      }
+    ]
+  },
   "ratelimits": [
     {
       "name": "PUBLIC_SAPO_RATE_LIMITER",

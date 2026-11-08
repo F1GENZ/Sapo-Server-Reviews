@@ -6,7 +6,7 @@ import { TokenEncryptionService } from '../src/core/sapo/token-encryption.servic
 import { SqliteRedisService } from '../src/db/sqlite-redis';
 import type { WorkerEnv } from '../src/env';
 import { buildAppEnv } from '../src/env';
-
+import { handleSapoQueue } from '../src/index';
 const testEnv = env as unknown as WorkerEnv & { SAPO_DB_SNAPSHOT_JSON?: string };
 const STORE_DOMAIN = 'f1genz-babymart.mysapo.net';
 const SHOP_ID = 'shop_babymart_test_01';
@@ -1049,5 +1049,156 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     const sliderData = await readData<{ v: number; items: Array<{ id: string }> }>(sliderRes);
     expect(sliderData.v).toBe(1);
     expect(sliderData.items.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('serves R2 media through /api/public/media/file/* with immutable Cache-Control, ETag 304, X-Edge-Cache MISS->HIT, and evicts caches.default on DELETE', async () => {
+    const headers = buildAdminHeaders();
+
+    // 1. Issue public upload ticket and upload PNG to R2
+    const ticketRes = await SELF.fetch('https://api-sapo-reviews.f1genz.dev/api/public/media/ticket', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Store-Domain': STORE_DOMAIN,
+      },
+      body: JSON.stringify({
+        productId: PRODUCT_ID,
+        contentType: 'image/png',
+        fileSize: VALID_PNG_BYTES.length,
+      }),
+    });
+    expect(ticketRes.status).toBe(200);
+    const ticketData = await readData<{ ticket: string }>(ticketRes);
+
+    const form = new FormData();
+    form.append('file', new File([VALID_PNG_BYTES], 'edge-cache.png', { type: 'image/png' }));
+    const uploadRes = await SELF.fetch(
+      `https://api-sapo-reviews.f1genz.dev/api/public/media/upload?productId=${PRODUCT_ID}&ticket=${encodeURIComponent(ticketData.ticket)}`,
+      {
+        method: 'POST',
+        headers: { 'X-Store-Domain': STORE_DOMAIN },
+        body: form,
+      },
+    );
+    expect(uploadRes.status).toBe(200);
+    const uploaded = await readData<{ url: string; type: string }>(uploadRes);
+    const key = new URL(uploaded.url).pathname.slice(1);
+
+    // 2. First GET -> 200 MISS with immutable Cache-Control and ETag
+    const firstGet = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/media/file/${key}`);
+    expect(firstGet.status).toBe(200);
+    expect(firstGet.headers.get('X-Edge-Cache')).toBe('MISS');
+    expect(firstGet.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+    const etag = firstGet.headers.get('ETag');
+    expect(etag).toBeTruthy();
+
+    // 3. Second GET -> 200 HIT
+    const secondGet = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/media/file/${key}`);
+    expect(secondGet.status).toBe(200);
+    expect(secondGet.headers.get('X-Edge-Cache')).toBe('HIT');
+    expect(secondGet.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+
+    // 4. Conditional GET with If-None-Match -> 304 Not Modified HIT
+    const condGet = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/media/file/${key}`, {
+      headers: { 'If-None-Match': etag! },
+    });
+    expect(condGet.status).toBe(304);
+    expect(condGet.headers.get('X-Edge-Cache')).toBe('HIT');
+
+    // 4b. Forged unsigned JWT on DELETE /api/public/media/file/* is rejected with 401 and keeps media intact
+    const forgedHeader = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const forgedPayload = Buffer.from(
+      JSON.stringify({
+        storeDomain: STORE_DOMAIN,
+        type: 'sapo_app_session',
+        gen: 1,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      }),
+    ).toString('base64url');
+    const forgedDelRes = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/media/file/${key}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${forgedHeader}.${forgedPayload}.forged_signature` },
+    });
+    expect(forgedDelRes.status).toBe(401);
+    const stillCachedGet = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/media/file/${key}`);
+    expect(stillCachedGet.status).toBe(200);
+    expect(stillCachedGet.headers.get('X-Edge-Cache')).toBe('HIT');
+    // 5. Create review referencing the media, then DELETE the review -> evicts caches.default -> GET returns 404
+    const createRevRes = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/admin/reviews/${PRODUCT_ID}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        rating: 5,
+        author: 'Media Cache Buyer',
+        content: 'Hinh anh ro net, chat luong tot',
+        media: [{ url: uploaded.url, type: 'image' }],
+      }),
+    });
+    expect(createRevRes.status).toBe(201);
+    const createdRev = await readData<{ id: string }>(createRevRes);
+
+    const delRevRes = await SELF.fetch(
+      `https://api-sapo-reviews.f1genz.dev/api/admin/reviews/${PRODUCT_ID}/${createdRev.id}`,
+      {
+        method: 'DELETE',
+        headers,
+      },
+    );
+    expect(delRevRes.status).toBe(200);
+
+    // 6. Immediately after DELETE -> GET returns 404 Not Found
+    const afterDeleteGet = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/media/file/${key}`);
+    expect(afterDeleteGet.status).toBe(404);
+
+    // 7. Verify AI status includes fallbackModel=@cf/meta/llama-3.1-8b-instruct-fast
+    const aiStatusRes = await SELF.fetch('https://api-sapo-reviews.f1genz.dev/api/admin/ai/status', { headers });
+    expect(aiStatusRes.status).toBe(200);
+    const aiStatusJson = (await aiStatusRes.json()) as {
+      fallbackModel: string;
+      data: { fallbackModel: string };
+    };
+    expect(aiStatusJson.fallbackModel).toBe('@cf/meta/llama-3.1-8b-instruct-fast');
+    expect(aiStatusJson.data.fallbackModel).toBe('@cf/meta/llama-3.1-8b-instruct-fast');
+
+    // 8. Verify Queue consumer batching by storeDomain & Edge Cache invalidation
+    await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${STORE_DOMAIN}`);
+    const beforeQueueHit = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${STORE_DOMAIN}`);
+    expect(beforeQueueHit.headers.get('X-Edge-Cache')).toBe('HIT');
+
+    let acked = 0;
+    const fakeBatch = {
+      queue: 'f1genz-sapo-reviews-events-queue',
+      messages: [
+        {
+          id: 'sm1',
+          timestamp: new Date(),
+          attempts: 1,
+          body: { kind: 'webhook.process', storeDomain: STORE_DOMAIN },
+          ack: () => {
+            acked += 1;
+          },
+          retry: () => undefined,
+        },
+        {
+          id: 'sm2',
+          timestamp: new Date(),
+          attempts: 1,
+          body: { kind: 'outbound.deliver', storeDomain: STORE_DOMAIN },
+          ack: () => {
+            acked += 1;
+          },
+          retry: () => undefined,
+        },
+      ],
+      ackAll: () => undefined,
+      retryAll: () => undefined,
+    } as unknown as MessageBatch<unknown>;
+
+    await handleSapoQueue(fakeBatch, testEnv);
+    expect(acked).toBe(2);
+
+    const afterQueueMiss = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/${PRODUCT_ID}/summary?shop=${STORE_DOMAIN}`);
+    expect(afterQueueMiss.headers.get('X-Edge-Cache')).toBe('MISS');
   });
 });

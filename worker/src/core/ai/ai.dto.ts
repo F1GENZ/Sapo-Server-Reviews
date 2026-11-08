@@ -21,4 +21,9 @@ export class ReplySuggestionDto {
   @IsString()
   @Length(0, 120)
   storeName?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 40)
+  provider?: string;
 }

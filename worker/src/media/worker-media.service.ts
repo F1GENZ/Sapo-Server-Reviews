@@ -2,7 +2,7 @@ import { HttpException, HttpStatus } from '@nestjs/common';
 import type { AppEnv } from '../core/config/env.schema';
 import { MediaService, sniffUploadContentType, type StoredMediaObject, type StoredMediaPage } from '../core/media/media.service';
 import type { RedisService } from '../core/redis/redis.service';
-
+import { evictSapoMediaEdgeCache, MEDIA_IMMUTABLE_CACHE_CONTROL } from '../edge-cache';
 const UPLOAD_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -14,6 +14,8 @@ const OBJECT_KEY_RE = /^reviews\/([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.mysapo\.
 const TICKET_NONCE_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 export class WorkerMediaService extends MediaService {
+  private readonly evictedKeys: string[] = [];
+
   constructor(
     private readonly workerEnv: AppEnv,
     redis: RedisService,
@@ -22,6 +24,10 @@ export class WorkerMediaService extends MediaService {
     super(workerEnv, redis);
   }
 
+  drainEvictedKeys(): string[] {
+    if (this.evictedKeys.length === 0) return [];
+    return this.evictedKeys.splice(0, this.evictedKeys.length);
+  }
   override get storageConfigured(): boolean {
     if (this.r2Bucket && this.workerEnv.R2_PUBLIC_DOMAIN) return true;
     return super.storageConfigured;
@@ -70,7 +76,7 @@ export class WorkerMediaService extends MediaService {
     await this.r2Bucket.put(key, new Uint8Array(buffer), {
       httpMetadata: {
         contentType: sniffed,
-        cacheControl: 'public, max-age=300',
+        cacheControl: MEDIA_IMMUTABLE_CACHE_CONTROL,
       },
     });
     return { cdnUrl: `https://${publicDomain}/${key}`, type: mediaType };
@@ -97,6 +103,8 @@ export class WorkerMediaService extends MediaService {
     const unique = [...new Set(keys)];
     if (unique.length === 0) return 0;
     await this.r2Bucket.delete(unique);
+    await evictSapoMediaEdgeCache(unique);
+    this.evictedKeys.push(...unique);
     return unique.length;
   }
 

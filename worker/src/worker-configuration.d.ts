@@ -33,6 +33,9 @@ interface __BaseEnv_Env {
 	AI_MODEL: "gemini-2.5-flash";
 	STORE_DO: DurableObjectNamespace<import("./index").StoreDO>;
 	STORE: DurableObjectNamespace<import("./index").StoreDO>;
+	AI?: Ai;
+	ANALYTICS?: AnalyticsEngineDataset;
+	EVENTS_QUEUE?: Queue;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {

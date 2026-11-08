@@ -5,10 +5,18 @@ export interface WorkerEnv {
   STORE?: DurableObjectNamespace;
   MEDIA_BUCKET?: R2Bucket;
   ASSETS?: Fetcher;
+  AI?: {
+    run(model: string, inputs: Record<string, unknown>): Promise<unknown>;
+  };
+  ANALYTICS?: {
+    writeDataPoint(point: { blobs?: string[]; doubles?: number[]; indexes?: string[] }): void;
+  };
+  EVENTS_QUEUE?: {
+    send(body: unknown): Promise<unknown>;
+  };
   PUBLIC_SAPO_RATE_LIMITER?: {
     limit(opts: { key: string }): Promise<{ success: boolean }>;
   };
-
   NODE_ENV?: string;
   PORT?: string;
   FRONTEND_URL?: string;
