@@ -23,7 +23,7 @@ export class StoreDO extends DurableObject<WorkerEnv> {
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
     super(ctx, env);
     this.prisma = new PrismaSqliteService(ctx.storage.sql);
-    this.redis = new SqliteRedisService(ctx.storage.sql, env.REDIS_KEY_PREFIX || 'sapo-review');
+    this.redis = new SqliteRedisService(ctx.storage.sql, 'sapo-review');
     const built = createApp(this.prisma, this.redis, env);
     this.app = built.app;
     this.container = built.container;

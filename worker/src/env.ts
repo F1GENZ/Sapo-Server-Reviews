@@ -18,7 +18,6 @@ export interface WorkerEnv {
     limit(opts: { key: string }): Promise<{ success: boolean }>;
   };
   NODE_ENV?: string;
-  PORT?: string;
   FRONTEND_URL?: string;
   API_BASE_URL?: string;
   CORS_ALLOWED_ORIGINS?: string;
@@ -43,7 +42,6 @@ export interface WorkerEnv {
   APP_SESSION_COOKIE_NAME?: string;
   SESSION_COOKIE_DOMAIN?: string;
 
-  REDIS_KEY_PREFIX?: string;
   DATA_ENCRYPTION_KEY?: string;
 
   AUTH_RATE_LIMIT_WINDOW_SECONDS?: string;
@@ -70,7 +68,6 @@ export const buildAppEnv = (raw: WorkerEnv): AppEnv => {
 
   return {
     NODE_ENV: nodeEnv,
-    PORT: Number(raw.PORT ?? 3021),
     LISTEN_HOST: '0.0.0.0',
     FRONTEND_URL: String(raw.FRONTEND_URL ?? 'https://reviews-sapo.f1genz.dev').replace(/\/+$/, ''),
     API_BASE_URL: String(raw.API_BASE_URL ?? 'https://api-sapo-reviews.f1genz.dev').replace(/\/+$/, ''),
@@ -110,7 +107,6 @@ export const buildAppEnv = (raw: WorkerEnv): AppEnv => {
     REDIS_USERNAME: '',
     REDIS_PASSWORD: '',
     REDIS_TLS: false,
-    REDIS_KEY_PREFIX: String(raw.REDIS_KEY_PREFIX ?? 'sapo-review'),
 
     DATABASE_URL: 'sqlite://store-do',
     DIRECT_URL: 'sqlite://store-do',

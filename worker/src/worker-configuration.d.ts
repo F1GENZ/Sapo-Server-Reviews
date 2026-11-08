@@ -6,7 +6,6 @@ interface __BaseEnv_Env {
 	PUBLIC_SAPO_RATE_LIMITER: RateLimit;
 	ASSETS: Fetcher;
 	NODE_ENV: "production";
-	PORT: "3021";
 	FRONTEND_URL: "https://reviews-sapo.f1genz.dev";
 	API_BASE_URL: "https://api-sapo-reviews.f1genz.dev";
 	CORS_ALLOWED_ORIGINS: "https://reviews-sapo.f1genz.dev,https://f1genz-sapo-reviews-admin.pages.dev";
@@ -19,7 +18,6 @@ interface __BaseEnv_Env {
 	APP_SESSION_COOKIE_NAME: "f1genz_review_sapo_session";
 	APP_SESSION_TTL_SECONDS: "43200";
 	SESSION_HANDOFF_TTL_SECONDS: "120";
-	REDIS_KEY_PREFIX: "sapo-review";
 	R2_WORKER_URL: "https://f1genz-sapo-reviews-media.icy-wind-c674.workers.dev";
 	R2_PUBLIC_DOMAIN: "images-sapo.f1genz.dev";
 	AUTH_RATE_LIMIT_WINDOW_SECONDS: "60";
@@ -49,7 +47,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "NODE_ENV" | "PORT" | "FRONTEND_URL" | "API_BASE_URL" | "CORS_ALLOWED_ORIGINS" | "REQUEST_BODY_LIMIT" | "WEBHOOK_BODY_LIMIT" | "SAPO_SCOPE" | "SAPO_LOGIN_CALLBACK_URL" | "SAPO_INSTALL_CALLBACK_URL" | "SAPO_USE_CONNECT_TOKEN" | "APP_SESSION_COOKIE_NAME" | "APP_SESSION_TTL_SECONDS" | "SESSION_HANDOFF_TTL_SECONDS" | "REDIS_KEY_PREFIX" | "R2_WORKER_URL" | "R2_PUBLIC_DOMAIN" | "AUTH_RATE_LIMIT_WINDOW_SECONDS" | "AUTH_RATE_LIMIT_MAX" | "SESSION_EXCHANGE_RATE_LIMIT_MAX" | "PUBLIC_RATE_LIMIT_WINDOW_SECONDS" | "PUBLIC_RATE_LIMIT_MAX" | "WEBHOOK_RATE_LIMIT_WINDOW_SECONDS" | "WEBHOOK_RATE_LIMIT_MAX" | "WEBHOOK_AUTO_SUBSCRIBE" | "AI_MODEL">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "NODE_ENV" | "FRONTEND_URL" | "API_BASE_URL" | "CORS_ALLOWED_ORIGINS" | "REQUEST_BODY_LIMIT" | "WEBHOOK_BODY_LIMIT" | "SAPO_SCOPE" | "SAPO_LOGIN_CALLBACK_URL" | "SAPO_INSTALL_CALLBACK_URL" | "SAPO_USE_CONNECT_TOKEN" | "APP_SESSION_COOKIE_NAME" | "APP_SESSION_TTL_SECONDS" | "SESSION_HANDOFF_TTL_SECONDS" | "R2_WORKER_URL" | "R2_PUBLIC_DOMAIN" | "AUTH_RATE_LIMIT_WINDOW_SECONDS" | "AUTH_RATE_LIMIT_MAX" | "SESSION_EXCHANGE_RATE_LIMIT_MAX" | "PUBLIC_RATE_LIMIT_WINDOW_SECONDS" | "PUBLIC_RATE_LIMIT_MAX" | "WEBHOOK_RATE_LIMIT_WINDOW_SECONDS" | "WEBHOOK_RATE_LIMIT_MAX" | "WEBHOOK_AUTO_SUBSCRIBE" | "AI_MODEL">> {}
 }
 declare module "*.txt" {
 	const value: string;

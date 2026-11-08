@@ -3,7 +3,7 @@ import { assertEncryptionKey, assertUsableSecret, isPlaceholderSecret } from './
 
 export type AppEnv = {
   NODE_ENV: 'development' | 'test' | 'production';
-  PORT: number;
+  PORT?: number;
   LISTEN_HOST: string;
   FRONTEND_URL: string;
   API_BASE_URL: string;
@@ -35,7 +35,7 @@ export type AppEnv = {
   REDIS_USERNAME: string;
   REDIS_PASSWORD: string;
   REDIS_TLS: boolean;
-  REDIS_KEY_PREFIX: string;
+  REDIS_KEY_PREFIX?: string;
 
   DATABASE_URL: string;
   DIRECT_URL: string;
@@ -365,7 +365,6 @@ export const loadEnv = (env: RawEnv = process.env): AppEnv => {
         'DATABASE_URL',
         'DIRECT_URL',
         'DATA_ENCRYPTION_KEY',
-        'REDIS_KEY_PREFIX',
         'READINESS_TOKEN',
         'AUTH_RATE_LIMIT_WINDOW_SECONDS',
         'AUTH_RATE_LIMIT_MAX',
@@ -379,14 +378,12 @@ export const loadEnv = (env: RawEnv = process.env): AppEnv => {
     requireRawProduction(
       env,
       [
-        'PORT',
         'REQUEST_BODY_LIMIT',
         'WEBHOOK_BODY_LIMIT',
         'SAPO_SCOPE',
         'APP_SESSION_TTL_SECONDS',
         'SESSION_HANDOFF_TTL_SECONDS',
         'REDIS_PORT',
-        'REDIS_KEY_PREFIX',
         'SAPO_API_MAX_CONCURRENT',
         'AUTH_RATE_LIMIT_WINDOW_SECONDS',
         'AUTH_RATE_LIMIT_MAX',
