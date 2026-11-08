@@ -12,6 +12,7 @@ import { ShopDomainService, normalizeShopDomain } from './shop-domain.service';
 import { TokenEncryptionService } from './token-encryption.service';
 import { StorefrontService } from '../storefront/storefront.service';
 import { WebhookRegistrationService } from './webhook-registration.service';
+import { CatalogSyncService } from '../catalog/catalog-sync.service';
 
 const BLOCKED_STATUSES = new Set(['canceled', 'expired', 'needs_reinstall', 'declined', 'uninstalled']);
 
@@ -43,6 +44,7 @@ export class SapoService {
     private readonly lifecycleLocks: LifecycleLockService,
     private readonly webhookRegistration: WebhookRegistrationService,
     private readonly storefrontService: StorefrontService,
+    private readonly catalogSync: CatalogSyncService,
   ) {}
 
   private buildAuthorizeUrl(input: { flow: 'login' | 'install'; state: string; storeDomain?: string }): string {
@@ -198,6 +200,10 @@ export class SapoService {
       this.storefrontService.writeStorefrontConfig(storeDomain, accessToken)
         .catch((err: unknown) => {
           this.logger.error(`[install] storefront config write failed for ${storeDomain}: ${errorMessage(err)}`);
+        });
+      this.catalogSync.backfillStore(storeDomain, accessToken)
+        .catch((err: unknown) => {
+          this.logger.error(`[install] catalog backfill failed for ${storeDomain}: ${errorMessage(err)}`);
         });
 
       this.logger.log(`[install] creating handoff for ${storeDomain}`);

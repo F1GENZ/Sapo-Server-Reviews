@@ -3,6 +3,7 @@ import { SELF, env } from 'cloudflare:test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionService } from '../src/core/sapo/session.service';
 import { TokenEncryptionService } from '../src/core/sapo/token-encryption.service';
+import { SapoService } from '../src/core/sapo/sapo.service';
 import { SqliteRedisService } from '../src/db/sqlite-redis';
 import type { WorkerEnv } from '../src/env';
 import { buildAppEnv } from '../src/env';
@@ -1569,5 +1570,62 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
       body: JSON.stringify({ rating: 5, author: 'Csrf Probe', content: 'khong duoc tao' }),
     });
     expect(res.status).toBe(401);
+  });
+});
+
+describe('Sapo install callback catalog backfill', () => {
+  const INSTALL_ACCESS_TOKEN = 'access-token-install-test';
+  const HANDOFF = { url: 'https://api-sapo-reviews.f1genz.dev/handoff/install-test' };
+
+  const buildInstallService = (backfillStore: (storeDomain: string, accessToken: string) => Promise<unknown>) => {
+    const catalogSync = { backfillStore: vi.fn(backfillStore) };
+    const service = new SapoService(
+      buildAppEnv(testEnv),
+      {
+        appInstall: {
+          findUnique: async () => null,
+          upsert: async () => ({}),
+        },
+        shop: { upsert: async () => ({ id: 'shop-install-test' }) },
+      } as never,
+      { consume: async () => ({ storeDomain: STORE_DOMAIN, createdAt: 0, redirectTo: undefined }) } as never,
+      {
+        exchangeCode: async () => ({ access_token: INSTALL_ACCESS_TOKEN }),
+        getShop: async () => ({ id: 1 }),
+      } as never,
+      { createHandoff: async () => HANDOFF } as never,
+      { encrypt: () => ({ ciphertext: 'c', iv: 'i', tag: 't' }) } as never,
+      { collectDomains: () => [], saveMapping: async () => undefined } as never,
+      { acquireLifecycleLock: async () => 'lock-install-test', release: async () => undefined } as never,
+      { registerForInstall: async () => ({ status: 'registered' }) } as never,
+      { writeStorefrontConfig: async () => undefined } as never,
+      catalogSync as never,
+    );
+    return { service, catalogSync };
+  };
+
+  it('starts the catalog backfill with the installed store domain and access token', async () => {
+    const { service, catalogSync } = buildInstallService(async () => ({
+      synced: 0,
+      pages: 0,
+      failedPages: 0,
+      totalFromCount: 0,
+      stopReason: 'completed',
+    }));
+
+    const handoff = await service.processInstallCallback('code-install-test', 'state-install-test');
+
+    expect(handoff).toEqual(HANDOFF);
+    expect(catalogSync.backfillStore).toHaveBeenCalledTimes(1);
+    expect(catalogSync.backfillStore).toHaveBeenCalledWith(STORE_DOMAIN, INSTALL_ACCESS_TOKEN);
+  });
+
+  it('keeps the install successful when the catalog backfill rejects', async () => {
+    const { service, catalogSync } = buildInstallService(async () => {
+      throw new Error('sapo products endpoint unavailable');
+    });
+
+    await expect(service.processInstallCallback('code-install-test', 'state-install-test')).resolves.toEqual(HANDOFF);
+    expect(catalogSync.backfillStore).toHaveBeenCalledTimes(1);
   });
 });

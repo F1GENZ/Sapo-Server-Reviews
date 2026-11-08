@@ -295,6 +295,8 @@ export const createApp = (
     lifecycleLock,
     sessionService,
   );
+  const catalogProductStore = new CatalogProductStoreService(prismaAsService);
+  const catalogSync = new CatalogSyncService(sapoApiService, catalogProductStore, prismaAsService);
   const sapoService = new SapoService(
     env,
     prismaAsService,
@@ -306,10 +308,9 @@ export const createApp = (
     lifecycleLock,
     webhookRegistrationService,
     storefrontService,
+    catalogSync,
   );
 
-  const catalogProductStore = new CatalogProductStoreService(prismaAsService);
-  const catalogSync = new CatalogSyncService(sapoApiService, catalogProductStore, prismaAsService);
   const purchaseStore = new PurchaseStoreService(prismaAsService, env);
   const pendingMetafields = new MetafieldSyncPendingService(prismaAsService);
   const outboundDispatcher = new OutboundDispatcherService(env, prismaAsService, tokenEncryption);
