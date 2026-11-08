@@ -114,6 +114,7 @@ const ReviewCard = ({
   const [aiSuggesting, setAiSuggesting] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [pinPending, setPinPending] = useState(false);
+  const [editVideoUrl, setEditVideoUrl] = useState("");
   const [statusAction, setStatusAction] = useState(null);
   const fileRef = useRef(null);
   const { upload, uploading, progress } = useMediaUpload();
