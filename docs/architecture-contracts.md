@@ -60,7 +60,7 @@ Modules are wired in `src/app.module.ts`.
 
 | Method | Path | Auth | Contract |
 |---|---|---|---|
-| `GET` | `/api/oauth/install/start` | public, auth rate limit | Returns an install authorize URL for `storeDomain`. |
+| `GET` | `/api/oauth/install/start` | public, auth rate limit | Returns an install authorize URL for `storeDomain` as JSON for API clients (`Accept: application/json`, `X-Requested-With`, or `format=json`); anything else, including a browser navigation, gets `302` to that URL. |
 | `GET`/`POST` | `/api/oauth/install/callback` | public, auth rate limit | Install callback; consumes `install` state, exchanges the code, persists the install, returns a handoff (JSON or `302` to `FRONTEND_URL` for browsers). |
 | `GET` | `/api/oauth/install/login`, `/api/oauth/install/login/entry` | public, auth rate limit | Start a login flow. |
 | `GET` | `/api/oauth/install/login/verify-hmac` | public, auth rate limit | Verify the signed launch query and return a handoff; no `hmac` starts login; invalid `hmac` is `401`. |

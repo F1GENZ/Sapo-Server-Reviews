@@ -31,6 +31,9 @@ Rate limits use `AUTH_RATE_LIMIT_WINDOW_SECONDS` and `AUTH_RATE_LIMIT_MAX` (sess
       https://{store}.mysapo.net/admin/oauth/authorize
         ?client_id={SAPO_CLIENT_ID}&scope={SAPO_SCOPE}
         &redirect_uri={SAPO_INSTALL_CALLBACK_URL}&state={state}
+      The URL is the JSON body for API clients (Accept: application/json,
+      X-Requested-With, or format=json) and a 302 Location for everything else,
+      so a plain browser navigation lands on Sapo directly.
 
 2. Merchant approves; Sapo redirects to
    GET /api/oauth/install/callback?code=...&state=...
@@ -80,7 +83,8 @@ Sapo signs with sorted parameters, and the digest is Base64, not hex.
 
 - Format `sapo_oauth_<64 hex>`; stored in Redis as `oauth-state:{sha256(state)}` for 30 minutes.
 - Payload: `flow` (`login` or `install`), `createdAt`, `storeDomain`, optional safe `redirectTo`.
-- Consumed atomically with `GETDEL`; a replayed or wrong-flow state is rejected.
+- Consumed atomically with `GETDEL`; a replayed state is rejected, and each handler consumes only the flow it serves (`install` or `login`).
+- Every callback route (`/api/oauth/install/callback` and `/api/oauth/install/login/callback`, GET and POST) peeks the state's flow and dispatches to that flow's handler, so Sapo may land either flow on either configured callback URL; the state still decides which handler runs and is single-use either way.
 - `redirectTo` is kept only if it is a safe redirect: starts with exactly one `/`, is not `//...`, has no control characters, stays same-origin after URL normalization, and does not target `/install*`, `/oauth*`, or `/api/oauth*` (checked before and after decoding). Anything else becomes `/dashboard`.
 
 ## Token management
