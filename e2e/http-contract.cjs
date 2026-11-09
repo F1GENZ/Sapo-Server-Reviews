@@ -177,7 +177,9 @@ async function main() {
       });
 
     async function startInstall(store) {
-      const res = await api(`/api/oauth/install/start?storeDomain=${encodeURIComponent(store)}`);
+      const res = await api(`/api/oauth/install/start?storeDomain=${encodeURIComponent(store)}`, {
+        headers: { accept: "application/json" },
+      });
       expectStatus(res, 200, "install start: ");
       const url = new URL(String(res.raw).replace(/^"|"$/g, "").trim());
       return { res, url, state: url.searchParams.get("state") };
@@ -298,6 +300,14 @@ async function main() {
       assert.equal(url.searchParams.get("redirect_uri"), `${BASE}/api/oauth/install/callback`);
       assert.match(oauthState, /^sapo_oauth_[a-f0-9]{64}$/);
       assert.ok(!url.search.includes(SECRETS.clientSecret), "client secret in authorize URL");
+      const browser = await api(`/api/oauth/install/start?storeDomain=${encodeURIComponent(STORE_A)}`, {
+        headers: { accept: "text/html" },
+      });
+      expectStatus(browser, 302, "browser install start: ");
+      const browserUrl = new URL(browser.headers.location);
+      assert.equal(browserUrl.origin, `https://${STORE_A}`);
+      assert.equal(browserUrl.pathname, "/admin/oauth/authorize");
+      assert.ok(!browser.headers.location.includes(SECRETS.clientSecret), "client secret in redirect");
     });
 
     await check("O3", "login start builds an authorize URL pointing at the login callback", async () => {
@@ -321,7 +331,7 @@ async function main() {
       assert.ok(!JSON.stringify(installRow).includes("e2e-token-"), "access token stored in plaintext");
     });
 
-    await check("O5", "replayed, malformed, missing and wrong-flow states are rejected", async () => {
+    await check("O5", "replayed, malformed and missing states are rejected; a cross-flow state runs its own flow once", async () => {
       const first = await startInstall(STORE_A);
       const ok = await api(`/api/oauth/install/callback?code=e2e-code-alpha&state=${first.state}`, { headers: { accept: "application/json" } });
       expectStatus(ok, [200, 201]);
@@ -334,7 +344,13 @@ async function main() {
       const loginUrl = await api(`/api/oauth/install/login?storeDomain=${STORE_A}`, { headers: { accept: "application/json" } });
       const loginState = new URL(String(loginUrl.raw).replace(/^"|"$/g, "").trim()).searchParams.get("state");
       const crossFlow = await api(`/api/oauth/install/callback?code=e2e-code-alpha&state=${loginState}`, { headers: { accept: "application/json" } });
-      expectStatus(crossFlow, 401, "login state at install callback: ");
+      expectStatus(crossFlow, [200, 201], "login state at install callback dispatches to the login flow: ");
+      assert.equal(crossFlow.body.storeDomain, STORE_A);
+      expectStatus(
+        await api(`/api/oauth/install/callback?code=e2e-code-alpha&state=${loginState}`, { headers: { accept: "application/json" } }),
+        401,
+        "replayed login state: ",
+      );
     });
 
     await check("O6", "install callback POST requires a code; a code Sapo refuses never yields a handoff", async () => {
