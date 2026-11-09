@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import { CatalogSyncService } from '../catalog/catalog-sync.service';
 import { STORE_DOMAIN_RE } from '../common/security/public-limits';
 import { PrismaService } from '../database/prisma.service';
+import type { EventsQueuePort } from '../../events-queue';
 import { PurchaseStoreService } from '../purchase/purchase-store.service';
 import { HmacVerifierService } from './hmac-verifier.service';
 import { SapoService } from './sapo.service';
@@ -75,6 +76,7 @@ export class WebhookService {
     private readonly sapo: SapoService,
     private readonly catalogSync: CatalogSyncService,
     private readonly purchases: PurchaseStoreService,
+    private readonly eventsQueue?: EventsQueuePort,
   ) {}
 
   private getPayload(body: unknown): Record<string, unknown> {
@@ -312,7 +314,15 @@ export class WebhookService {
       return { ...result, eventId };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Webhook processing failed';
-      await this.markFailed(eventId, message);
+      const retryScheduled = await this.markFailed(eventId, message);
+      if (retryScheduled && identity.storeDomain) {
+        await this.eventsQueue?.send({
+          kind: 'webhook.process',
+          storeDomain: identity.storeDomain,
+          eventId,
+          timestamp: Date.now(),
+        });
+      }
       throw error;
     }
   }
@@ -377,7 +387,7 @@ export class WebhookService {
     }
   }
 
-  private async markFailed(eventId: string, message: string): Promise<void> {
+  private async markFailed(eventId: string, message: string): Promise<boolean> {
     const row = await this.prisma.webhookEvent
       .findUnique({ where: { id: eventId }, select: { attempts: true, maxAttempts: true } })
       .catch(() => null);
@@ -393,6 +403,7 @@ export class WebhookService {
         nextRetryAt: exhausted ? null : new Date(Date.now() + delay),
       },
     });
+    return !exhausted;
   }
 
   async reclaimStalled(now = new Date()): Promise<{ reclaimed: number; failed: number }> {

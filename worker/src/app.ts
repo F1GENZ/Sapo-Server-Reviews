@@ -34,6 +34,7 @@ import { ReviewController } from './core/review/review.controller';
 import { ReviewDataToolsService } from './core/review/review-data-tools.service';
 import { ReviewProductStoreService } from './core/review/review-product-store.service';
 import { ReviewService } from './core/review/review.service';
+import { createEventsQueue } from './events-queue';
 import { HmacVerifierService } from './core/sapo/hmac-verifier.service';
 import { LifecycleLockService } from './core/sapo/lifecycle-lock.service';
 import { OAuthStateService } from './core/sapo/oauth-state.service';
@@ -366,6 +367,7 @@ export const createApp = (
     sapoService,
     catalogSync,
     purchaseStore,
+    createEventsQueue(workerEnv),
   );
 
   const dashboardService = new DashboardService(reviewProductStore, qnaStore, prismaAsService);

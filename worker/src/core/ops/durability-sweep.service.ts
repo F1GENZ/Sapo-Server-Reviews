@@ -5,6 +5,7 @@ import type { AppEnv } from '../config/env.schema';
 import { PrismaService } from '../database/prisma.service';
 import { MediaService, type StoredMediaObject } from '../media/media.service';
 import { OutboundDispatcherService } from '../outbound/outbound-dispatcher.service';
+import { recordDurabilitySweep } from './durability-sweep-state';
 import { RedisService, type RedisLock } from '../redis/redis.service';
 import { ReviewService } from '../review/review.service';
 import { SapoService } from '../sapo/sapo.service';
@@ -117,6 +118,7 @@ export class DurabilitySweepService implements OnModuleInit, OnModuleDestroy {
         }
         this.lastOrphanAt = now.getTime();
       }
+      await recordDurabilitySweep(this.redis, { at: Date.now(), skipped: null, errors: report.errors });
       return report;
     } finally {
       if (lock) await this.redis.releaseLock(lock).catch(() => false);

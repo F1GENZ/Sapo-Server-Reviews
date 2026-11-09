@@ -22,6 +22,7 @@ import { PrismaService } from '../database/prisma.service';
 import { MetafieldSyncPendingService } from '../database/metafield-sync-pending.service';
 import { RedisService } from '../redis/redis.service';
 import { StorefrontService } from '../storefront/storefront.service';
+import { readDurabilitySweep } from './durability-sweep-state';
 import { runSection } from '../health/degraded-section';
 import { countRecentFailures, deriveHealthVerdict, FAILURE_WINDOW_MINUTES } from '../health/health-verdict';
 
@@ -71,13 +72,14 @@ export class OpsService {
     const run = <T>(name: string, load: () => Promise<T>): Promise<T | null> =>
       runSection(this.logger, name, degradedSections, load);
 
-    const [reviewStats, qnaStats, catalogAudit, purchaseAudit, webhookStats, metafieldSync, dbOk] = await Promise.all([
+    const [reviewStats, qnaStats, catalogAudit, purchaseAudit, webhookStats, metafieldSync, durabilitySweep, dbOk] = await Promise.all([
       run('reviewStats', () => this.reviewStore.getStatsForShop(shopId)),
       run('qnaStats', () => this.qnaStore.getStats(shopId)),
       run('catalogAudit', () => this.catalogStore.getAudit(shopId)),
       run('purchaseAudit', () => this.purchaseStore.getAudit(shopId)),
       run('webhooks', () => this.getWebhookSummary(storeDomain)),
       run('metafieldSync', () => this.pendingMetafields.countsFor(storeDomain)),
+      run('durabilitySweep', () => readDurabilitySweep(this.redis)),
       this.prisma.ping().catch((error: unknown) => {
         this.logger.warn(`Database ping failed: ${error instanceof Error ? error.message : String(error)}`);
         return false;
@@ -117,6 +119,7 @@ export class OpsService {
       purchases: purchaseAudit,
       webhooks: webhookStats ?? { totals: [], latest: [] },
       metafieldSync,
+      durabilitySweep,
       lastUpdated: latestActivityAt(webhookStats, install.updatedAt),
     };
   }

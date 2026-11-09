@@ -3,6 +3,7 @@ import { Controller, Get, Headers, Inject, Logger, UnauthorizedException } from 
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env.schema';
 import { PrismaService } from '../database/prisma.service';
+import { readDurabilitySweep } from '../ops/durability-sweep-state';
 import { RedisService } from '../redis/redis.service';
 import { countRecentFailures, deriveHealthVerdict, FAILURE_WINDOW_MINUTES } from './health-verdict';
 
@@ -77,6 +78,7 @@ export class HealthController {
       webhookRegistration,
       webhookDegraded,
       failedProbes,
+      durabilitySweep: await readDurabilitySweep(this.redis),
       build: this.env.BUILD_SHA,
     };
   }

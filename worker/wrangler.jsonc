@@ -14,6 +14,9 @@
     { "pattern": "reviews-sapo.f1genz.dev/api/*", "zone_name": "f1genz.dev" },
     { "pattern": "reviews-sapo.f1genz.dev/storefront/*", "zone_name": "f1genz.dev" }
   ],
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
   "alias": {
     "@nestjs/common": "./src/shims/nestjs-common.ts",
     "@nestjs/core": "./src/shims/nestjs-common.ts",
