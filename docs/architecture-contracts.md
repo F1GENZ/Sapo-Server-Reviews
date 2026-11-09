@@ -61,10 +61,10 @@ Modules are wired in `src/app.module.ts`.
 | Method | Path | Auth | Contract |
 |---|---|---|---|
 | `GET` | `/api/oauth/install/start` | public, auth rate limit | Returns an install authorize URL for `storeDomain` as JSON for API clients (`Accept: application/json`, `X-Requested-With`, or `format=json`); anything else, including a browser navigation, gets `302` to that URL. |
-| `GET`/`POST` | `/api/oauth/install/callback` | public, auth rate limit | Install callback; consumes `install` state, exchanges the code, persists the install, returns a handoff (JSON or `302` to `FRONTEND_URL` for browsers). |
+| `GET`/`POST` | `/api/oauth/install/callback` | public, auth rate limit | Dispatches on the state's flow: an `install` state exchanges the code, persists the install and returns a handoff; a `login` state completes a login instead. Response is JSON, or `302` to `FRONTEND_URL` for browsers. |
 | `GET` | `/api/oauth/install/login`, `/api/oauth/install/login/entry` | public, auth rate limit | Start a login flow. |
 | `GET` | `/api/oauth/install/login/verify-hmac` | public, auth rate limit | Verify the signed launch query and return a handoff; no `hmac` starts login; invalid `hmac` is `401`. |
-| `GET`/`POST` | `/api/oauth/install/login/callback` | public, auth rate limit | Login callback; returns a handoff or an install URL. |
+| `GET`/`POST` | `/api/oauth/install/login/callback` | public, auth rate limit | Dispatches on the state's flow: a `login` state returns a handoff or an install URL; an `install` state completes the install instead. |
 | `GET` | `/api/oauth/install/webhooks` | public | `200 ok` for reachability. |
 | `POST` | `/api/oauth/install/webhooks` | HMAC signature | Webhook delivery, see `docs/webhook-subscription-uninstall.md`. |
 | `POST` | `/api/auth/session/exchange` | handoff code, trusted origin, rate limited | Consume the code; set cookie; return `{ ok, storeDomain, redirectTo, sessionToken }`. |
