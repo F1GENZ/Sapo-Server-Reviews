@@ -8,6 +8,8 @@ import { SqliteRedisService } from '../src/db/sqlite-redis';
 import type { WorkerEnv } from '../src/env';
 import { buildAppEnv } from '../src/env';
 import { handleSapoQueue } from '../src/index';
+import workerEntry from '../src/index';
+import { WebhookService } from '../src/core/sapo/webhook.service';
 const testEnv = env as unknown as WorkerEnv & { SAPO_DB_SNAPSHOT_JSON?: string };
 const STORE_DOMAIN = 'f1genz-babymart.mysapo.net';
 const SHOP_ID = 'shop_babymart_test_01';
@@ -1094,7 +1096,7 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     expect(sliderData.items.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('serves R2 media through /api/public/media/file/* with immutable Cache-Control, ETag 304, X-Edge-Cache MISS->HIT, and evicts caches.default on DELETE', async () => {
+  it('serves R2 media through /api/public/media/file/* with a five-minute Cache-Control, ETag 304, X-Edge-Cache MISS->HIT, and evicts caches.default on DELETE', async () => {
     const headers = buildAdminHeaders();
 
     // 1. Issue public upload ticket and upload PNG to R2
@@ -1127,11 +1129,15 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     const uploaded = await readData<{ url: string; type: string }>(uploadRes);
     const key = new URL(uploaded.url).pathname.slice(1);
 
-    // 2. First GET -> 200 MISS with immutable Cache-Control and ETag
+    // 1b. The object itself is stored with the five-minute lifetime, not only the served response.
+    const storedObject = await testEnv.MEDIA_BUCKET!.head(key);
+    expect(storedObject?.httpMetadata?.cacheControl).toBe('public, max-age=300');
+
+    // 2. First GET -> 200 MISS with the five-minute Cache-Control and ETag
     const firstGet = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/media/file/${key}`);
     expect(firstGet.status).toBe(200);
     expect(firstGet.headers.get('X-Edge-Cache')).toBe('MISS');
-    expect(firstGet.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+    expect(firstGet.headers.get('Cache-Control')).toBe('public, max-age=300');
     const etag = firstGet.headers.get('ETag');
     expect(etag).toBeTruthy();
 
@@ -1139,7 +1145,7 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     const secondGet = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/media/file/${key}`);
     expect(secondGet.status).toBe(200);
     expect(secondGet.headers.get('X-Edge-Cache')).toBe('HIT');
-    expect(secondGet.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+    expect(secondGet.headers.get('Cache-Control')).toBe('public, max-age=300');
 
     // 4. Conditional GET with If-None-Match -> 304 Not Modified HIT
     const condGet = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/media/file/${key}`, {
@@ -1627,5 +1633,135 @@ describe('Sapo install callback catalog backfill', () => {
 
     await expect(service.processInstallCallback('code-install-test', 'state-install-test')).resolves.toEqual(HANDOFF);
     expect(catalogSync.backfillStore).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('durability sweep: events queue producer and cron trigger', () => {
+  type SentEvent = { kind: string; storeDomain: string; eventId?: string };
+
+  const buildQueue = () => {
+    const sent: SentEvent[] = [];
+    return {
+      sent,
+      port: {
+        send: async (event: SentEvent): Promise<boolean> => {
+          sent.push(event);
+          return true;
+        },
+      },
+    };
+  };
+
+  const buildWebhookService = (attempts: number, port: { send(event: SentEvent): Promise<boolean> }) =>
+    new WebhookService(
+      {
+        webhookEvent: {
+          create: async () => ({ id: 'evt-queue-1', status: 'received' }),
+          findUnique: async () => ({ attempts, maxAttempts: 8 }),
+          update: async () => ({}),
+        },
+        appInstall: { findUnique: async () => ({ shopId: SHOP_ID, status: 'active', lifecycleGeneration: 1 }) },
+        catalogProduct: { findFirst: async () => null },
+      } as never,
+      { verifyWebhookBody: () => undefined } as never,
+      { collectDomains: () => [], resolveStoreDomain: async () => null, saveMapping: async () => undefined } as never,
+      { uninstall: async () => ({}) } as never,
+      { resolveAccessToken: async () => 'access-token-queue-test' } as never,
+      {
+        handleProductWebhookWithToken: async () => {
+          throw new Error('sapo products endpoint unavailable');
+        },
+      } as never,
+      {} as never,
+      port,
+    );
+
+  const failingWebhook = () => ({
+    headers: { 'x-sapo-topic': 'products/update' },
+    query: {},
+    body: { storeDomain: STORE_DOMAIN, id: PRODUCT_ID },
+    rawBody: Buffer.from('{}'),
+  });
+
+  it('enqueues a webhook.process event when a webhook fails with a retry scheduled', async () => {
+    const queue = buildQueue();
+    const service = buildWebhookService(1, queue.port);
+
+    await expect(service.handle(failingWebhook())).rejects.toThrow('sapo products endpoint unavailable');
+
+    expect(queue.sent).toEqual([
+      {
+        kind: 'webhook.process',
+        storeDomain: STORE_DOMAIN,
+        eventId: 'evt-queue-1',
+        timestamp: expect.any(Number),
+      },
+    ]);
+  });
+
+  it('skips the queue once a webhook exhausted its attempts', async () => {
+    const queue = buildQueue();
+    const service = buildWebhookService(8, queue.port);
+
+    await expect(service.handle(failingWebhook())).rejects.toThrow('sapo products endpoint unavailable');
+
+    expect(queue.sent).toEqual([]);
+  });
+
+  it('runs the durability sweep through the StoreDO when the cron trigger fires', async () => {
+    const runs: number[] = [];
+    const scheduledEnv = {
+      STORE_DO: {
+        idFromName: () => 'global',
+        get: () => ({
+          runDurabilitySweep: async () => {
+            runs.push(Date.now());
+            return { at: Date.now(), errors: [] };
+          },
+        }),
+      },
+    } as unknown as WorkerEnv;
+    const pending: Promise<unknown>[] = [];
+    const handler = workerEntry as unknown as {
+      scheduled: (
+        controller: { scheduledTime: number; cron: string },
+        env: WorkerEnv,
+        ctx: { waitUntil(promise: Promise<unknown>): void },
+      ) => void;
+    };
+
+    handler.scheduled({ scheduledTime: Date.now(), cron: '*/5 * * * *' }, scheduledEnv, {
+      waitUntil: (promise: Promise<unknown>) => pending.push(promise),
+    });
+    await Promise.all(pending);
+
+    expect(runs).toHaveLength(1);
+  });
+
+  it('keeps the cron invocation alive when the sweep rejects', async () => {
+    const scheduledEnv = {
+      STORE_DO: {
+        idFromName: () => 'global',
+        get: () => ({
+          runDurabilitySweep: async () => {
+            throw new Error('simulated StoreDO sweep failure');
+          },
+        }),
+      },
+    } as unknown as WorkerEnv;
+    const pending: Promise<unknown>[] = [];
+    const handler = workerEntry as unknown as {
+      scheduled: (
+        controller: { scheduledTime: number; cron: string },
+        env: WorkerEnv,
+        ctx: { waitUntil(promise: Promise<unknown>): void },
+      ) => void;
+    };
+
+    handler.scheduled({ scheduledTime: Date.now(), cron: '*/5 * * * *' }, scheduledEnv, {
+      waitUntil: (promise: Promise<unknown>) => pending.push(promise),
+    });
+
+    await expect(Promise.all(pending)).resolves.toBeDefined();
   });
 });

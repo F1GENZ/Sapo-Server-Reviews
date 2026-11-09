@@ -153,6 +153,8 @@ npx wrangler secret put UPLOAD_SECRET    # interactive prompt; same value as R2_
 npx wrangler deploy
 ```
 
+A deploy also applies `triggers.crons` (`*/5 * * * *`). The `scheduled` handler runs `DurabilitySweepService.runOnce()` through the `StoreDO`, and that cron is the only periodic driver on Workers: the `setInterval` in `onModuleInit` belongs to the Node server and never survives a Worker invocation. The queue is the low-latency path: `WebhookService` sends `{kind: 'webhook.process', storeDomain, eventId}` to `EVENTS_QUEUE` (`f1genz-sapo-reviews-events-queue`) whenever a webhook fails with a retry still scheduled, the consumer groups the batch by store, runs one sweep, bumps that store's edge epoch and acks. A queue send never fails the merchant-facing request. Each completed sweep writes `durability-sweep:last` into the Durable Object key-value store, which is what `GET /readyz` (bearer `READINESS_TOKEN`) and `GET /api/admin/ops/health` return as `durabilitySweep`; a `null` there means no sweep has run since the last 7-day expiry of that key.
+
 `worker/wrangler.toml` pins `account_id`, binds `MEDIA` to the bucket `f1genz-sapo-reviews-media` and sets `CDN_DOMAIN=images-sapo.f1genz.dev`. Redeploy the Worker together with any server release that changes how it is called.
 
 Worker routes (`worker/src/index.js`), all requiring `X-Upload-Token` (constant-time compare against `UPLOAD_SECRET`):
@@ -164,6 +166,8 @@ Worker routes (`worker/src/index.js`), all requiring `X-Upload-Token` (constant-
 | `GET /list?prefix=&cursor=&limit=` | List objects (default prefix `reviews/`, `limit` 1-1000, default 200) with `key`, upload time and size. Used by the orphan sweep. |
 
 Deleted media leaves the Cloudflare edge within about five minutes (measured on production: a public `GET` still answered 200 right after `DELETE` and 404 after 320 s). A browser that already downloaded an image can keep showing it: the public response carries `Cache-Control: public, max-age=14400`, the zone's browser TTL.
+
+Objects uploaded while the Worker still stamped `public, max-age=31536000, immutable` keep that stored metadata: R2 has no metadata-only update, and a zone cache purge re-caches the object from R2 with the header it still carries. Clearing those copies needs a rewrite of each object with the new metadata (a server-side `CopyObject` with `MetadataDirective=REPLACE`, or re-upload), or accepting that they leave the edge only when the old lifetime ends.
 
 Orphan sweep (`src/ops/durability-sweep.service.ts`): every 5 minutes the sweep lists one page of 200 objects and deletes those uploaded more than 24 hours ago whose URL is not referenced by any `review_products.media` row of that store and product. Objects of a store without an install row are kept. After the last page it rests for 6 hours. It is skipped while `R2_WORKER_URL`, `R2_UPLOAD_SECRET` or `R2_PUBLIC_DOMAIN` is unset. Deleting a review (or removing media from one) deletes the objects immediately and best-effort; the sweep catches what that missed.
 

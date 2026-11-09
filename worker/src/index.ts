@@ -102,6 +102,10 @@ const recordSapoAnalytics = (
   return response;
 };
 
+export const handleScheduledSweep = async (env: WorkerEnv): Promise<void> => {
+  await getStoreStub(env).runDurabilitySweep();
+};
+
 export const handleSapoQueue = async (batch: MessageBatch<unknown>, env: WorkerEnv): Promise<void> => {
   const grouped = new Map<string, { messages: Message<unknown>[]; events: SapoQueueEvent[] }>();
   for (const msg of batch.messages) {
@@ -352,6 +356,13 @@ export default {
   },
   async queue(batch: MessageBatch<unknown>, env: WorkerEnv): Promise<void> {
     await handleSapoQueue(batch, env);
+  },
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(
+      handleScheduledSweep(env).catch((error: unknown) => {
+        console.error('sapo durability sweep failed', error instanceof Error ? error.message : String(error));
+      }),
+    );
   },
 } satisfies ExportedHandler<WorkerEnv>;
 

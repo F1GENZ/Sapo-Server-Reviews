@@ -5,7 +5,8 @@ const EDGE_CACHE_ORIGIN = 'https://edge-cache.f1genz.internal';
 const PUBLIC_CACHE_TTL_SECONDS = 60;
 const PUBLIC_CACHE_SWR_SECONDS = 300;
 const EPOCH_CACHE_TTL_SECONDS = 86_400;
-export const MEDIA_IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+// Review media can be deleted at any time, so the edge copy must expire quickly enough for a delete to be observable.
+export const MEDIA_CACHE_CONTROL = 'public, max-age=300';
 const SAPO_MEDIA_KEY_RE = /^reviews\/([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.mysapo\.net)\/\d{1,20}\/[A-Za-z0-9_-]{16,64}\.(jpg|png|webp|mp4)$/;
 const localEpochs = new Map<string, number>();
 
@@ -263,14 +264,14 @@ export const serveSapoMediaWithEdgeCache = async (
             status: 304,
             headers: {
               ETag: etag,
-              'Cache-Control': MEDIA_IMMUTABLE_CACHE_CONTROL,
+              'Cache-Control': MEDIA_CACHE_CONTROL,
               'X-Content-Type-Options': 'nosniff',
               'X-Edge-Cache': 'HIT',
             },
           });
         }
         const headers = new Headers(cached.headers);
-        headers.set('Cache-Control', MEDIA_IMMUTABLE_CACHE_CONTROL);
+        headers.set('Cache-Control', MEDIA_CACHE_CONTROL);
         headers.set('X-Content-Type-Options', 'nosniff');
         headers.set('X-Edge-Cache', 'HIT');
         return new Response(request.method === 'HEAD' ? null : cached.body, {
@@ -326,7 +327,7 @@ export const serveSapoMediaWithEdgeCache = async (
           status: 200,
           headers: {
             'Content-Type': contentType,
-            'Cache-Control': MEDIA_IMMUTABLE_CACHE_CONTROL,
+            'Cache-Control': MEDIA_CACHE_CONTROL,
             ETag: etag,
           },
         }),
@@ -341,7 +342,7 @@ export const serveSapoMediaWithEdgeCache = async (
       status: 304,
       headers: {
         ETag: etag,
-        'Cache-Control': MEDIA_IMMUTABLE_CACHE_CONTROL,
+        'Cache-Control': MEDIA_CACHE_CONTROL,
         'X-Content-Type-Options': 'nosniff',
         'X-Edge-Cache': 'MISS',
       },
@@ -352,7 +353,7 @@ export const serveSapoMediaWithEdgeCache = async (
     status: 200,
     headers: {
       'Content-Type': contentType,
-      'Cache-Control': MEDIA_IMMUTABLE_CACHE_CONTROL,
+      'Cache-Control': MEDIA_CACHE_CONTROL,
       ETag: etag,
       'X-Content-Type-Options': 'nosniff',
       'X-Edge-Cache': 'MISS',

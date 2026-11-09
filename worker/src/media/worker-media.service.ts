@@ -2,7 +2,7 @@ import { HttpException, HttpStatus } from '@nestjs/common';
 import type { AppEnv } from '../core/config/env.schema';
 import { MediaService, sniffUploadContentType, type StoredMediaObject, type StoredMediaPage } from '../core/media/media.service';
 import type { RedisService } from '../core/redis/redis.service';
-import { evictSapoMediaEdgeCache, MEDIA_IMMUTABLE_CACHE_CONTROL } from '../edge-cache';
+import { evictSapoMediaEdgeCache, MEDIA_CACHE_CONTROL } from '../edge-cache';
 const UPLOAD_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -76,7 +76,7 @@ export class WorkerMediaService extends MediaService {
     await this.r2Bucket.put(key, new Uint8Array(buffer), {
       httpMetadata: {
         contentType: sniffed,
-        cacheControl: MEDIA_IMMUTABLE_CACHE_CONTROL,
+        cacheControl: MEDIA_CACHE_CONTROL,
       },
     });
     return { cdnUrl: `https://${publicDomain}/${key}`, type: mediaType };

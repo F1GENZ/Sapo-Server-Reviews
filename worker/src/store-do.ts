@@ -50,4 +50,9 @@ export class StoreDO extends DurableObject<WorkerEnv> {
     await this.container.durabilitySweep.runOnce();
     return { processed: events.length, stores };
   }
+
+  async runDurabilitySweep(): Promise<{ at: number; errors: string[] }> {
+    const report = await this.container.durabilitySweep.runOnce();
+    return { at: Date.now(), errors: report.errors };
+  }
 }
