@@ -70,6 +70,11 @@ const Login = () => {
       authService
         .verifyLaunchQuery(window.location.search)
         .then(async (body) => {
+          if (body?.reason === "install_required" && body?.url) {
+            setPhase("redirecting");
+            navigateTopLevel(body.url);
+            return;
+          }
           if (!body?.handoffCode) throw new Error("Missing handoff code");
           const { storeDomain, redirectTo } = await completeHandoff(body.handoffCode);
           window.location.replace(getAuthenticatedRedirect(storeDomain, redirectTo));

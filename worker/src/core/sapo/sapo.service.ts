@@ -103,11 +103,15 @@ export class SapoService {
       });
     if (!shop) throw new BadRequestException('Failed to verify store identity');
 
+    return this.resolveSession(storeDomain, oauthState.redirectTo);
+  }
+
+  async resolveSession(storeDomain: string, redirectTo?: string): Promise<AuthStartResponse | HandoffResponse> {
     const install = await this.prisma.appInstall.findUnique({ where: { storeDomain } });
     if (!install || BLOCKED_STATUSES.has(String(install.status))) {
-      return { url: await this.buildInstallUrl({ storeDomain, redirectTo: oauthState.redirectTo }), reason: 'install_required' };
+      return { url: await this.buildInstallUrl({ storeDomain, redirectTo }), reason: 'install_required' };
     }
-    return this.sessionService.createHandoff(storeDomain, oauthState.redirectTo);
+    return this.sessionService.createHandoff(storeDomain, redirectTo);
   }
 
   async processInstallCallback(code: string, state: string | undefined): Promise<HandoffResponse> {

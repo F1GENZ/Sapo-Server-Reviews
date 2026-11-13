@@ -22,6 +22,8 @@ import { OpsController } from './core/ops/ops.controller';
 import { OpsService } from './core/ops/ops.service';
 import { OutboundDispatcherService } from './core/outbound/outbound-dispatcher.service';
 import { OutboundWebhookController } from './core/outbound/outbound-webhook.controller';
+import { ThemeInstallController } from './core/theme-install/theme-install.controller';
+import { ThemeInstallService } from './core/theme-install/theme-install.service';
 import { OutboundWebhookService } from './core/outbound/outbound-webhook.service';
 import { PurchaseStoreService } from './core/purchase/purchase-store.service';
 import { PublicQnaController } from './core/qna/public-qna.controller';
@@ -398,6 +400,7 @@ export const createApp = (
     outboundDispatcher,
   );
   const aiService = new AiService(env, rateLimit, workerEnv.AI ?? null);
+  const themeInstallService = new ThemeInstallService(env, sapoService, sapoApiService, aiService, redisAsService);
 
   const reflector = new Reflector();
   const shopAuthGuard = new ShopAuthGuard(env, sessionService, sapoService, reflector);
@@ -416,6 +419,7 @@ export const createApp = (
   const mediaController = new MediaController(mediaService);
   const outboundWebhookController = new OutboundWebhookController(outboundWebhookService);
   const aiController = new AiController(aiService);
+  const themeInstallController = new ThemeInstallController(themeInstallService);
 
   const requireShopAuth = async (req: ExpressReqLike, res: ExpressResLike): Promise<void> => {
     await shopAuthGuard.canActivate({
@@ -1248,6 +1252,32 @@ export const createApp = (
     const { req, res } = await buildExpressAdapters(c);
     await requireShopAuth(req, res);
     const out = await opsController.exportDiagnostics(req as never);
+    return finalizeResponse(res, out);
+  });
+
+  // Admin Theme Install Routes
+  app.get('/api/admin/theme-install/themes', async (c) => {
+    const { req, res } = await buildExpressAdapters(c);
+    await requireShopAuth(req, res);
+    const out = await themeInstallController.themes(req as never);
+    return finalizeResponse(res, out);
+  });
+  app.post('/api/admin/theme-install/plan', async (c) => {
+    const { req, res } = await buildExpressAdapters(c, { parseBody: true });
+    await requireShopAuth(req, res);
+    const out = await themeInstallController.plan(req as never);
+    return finalizeResponse(res, out);
+  });
+  app.post('/api/admin/theme-install/apply', async (c) => {
+    const { req, res } = await buildExpressAdapters(c, { parseBody: true });
+    await requireShopAuth(req, res);
+    const out = await themeInstallController.apply(req as never);
+    return finalizeResponse(res, out);
+  });
+  app.post('/api/admin/theme-install/uninstall', async (c) => {
+    const { req, res } = await buildExpressAdapters(c, { parseBody: true });
+    await requireShopAuth(req, res);
+    const out = await themeInstallController.uninstall(req as never);
     return finalizeResponse(res, out);
   });
 

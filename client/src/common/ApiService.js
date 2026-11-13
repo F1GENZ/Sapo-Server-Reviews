@@ -299,3 +299,27 @@ export const exportOpsDiagnostics = async () => {
   const res = await httpClient.get("/api/admin/ops/diagnostics/export", { timeout: 60000 });
   return res.data?.data;
 };
+
+export const fetchInstallThemes = async () => {
+  const res = await httpClient.get("/api/admin/theme-install/themes", { skipRetry: true });
+  return res.data?.data;
+};
+
+export const planThemeInstall = async (themeId) => {
+  const res = await httpClient.post("/api/admin/theme-install/plan", { themeId }, { timeout: 60000, skipRetry: true });
+  return res.data?.data;
+};
+
+export const applyThemeInstall = async ({ themeId, planHash }) => {
+  const res = await httpClient.post(
+    "/api/admin/theme-install/apply",
+    { themeId, planHash },
+    { timeout: 120000, skipRetry: true },
+  );
+  return res.data?.data;
+};
+
+export const uninstallThemeInstall = async (themeId) => {
+  const res = await httpClient.post("/api/admin/theme-install/uninstall", { themeId }, { timeout: 120000, skipRetry: true });
+  return res.data?.data;
+};

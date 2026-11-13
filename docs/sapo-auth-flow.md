@@ -60,11 +60,28 @@ Only `*.mysapo.net` hosts are accepted when building authorize URLs. A callback 
 
 ## Login flow and admin launch
 
-- **Launch with signature.** The Sapo admin opens the app with `store`, `timestamp`, and `hmac` in the query. The SPA forwards the raw query to `GET /api/oauth/install/login/verify-hmac`, which verifies it and returns a handoff for `store` with `redirectTo=/dashboard`.
+- **Launch with signature.** The Sapo admin opens the app with `store`, `timestamp`, and `hmac` in the query. The SPA forwards the raw query to `GET /api/oauth/install/login/verify-hmac`, which verifies it, then (`SapoService.resolveSession`): if the store has an install whose status is not blocked, returns a handoff with `redirectTo=/dashboard`; otherwise returns `{ url, reason: 'install_required' }` with an install authorize URL, and the SPA navigates top-level to it.
 - **Launch without signature, or session lost.** The SPA starts the login flow for a `storeDomain`; Sapo redirects to `SAPO_LOGIN_CALLBACK_URL`. The server consumes the `login` state, exchanges the code, re-verifies the store with `/admin/store.json`, then:
   - if an install exists and its status is not blocked, returns a handoff;
   - otherwise (no install, or `canceled`, `expired`, `needs_reinstall`, `declined`, `uninstalled`) returns an install authorize URL (`reason: install_required`).
 - A present-but-invalid or stale `hmac` is rejected (`401`); it never falls back to a session.
+
+## Install from the Sapo App Store (measured 2026-11-11)
+
+"Cài đặt ngay" on `apps.sapo.vn/<alias>` posts `alias` and `store` to `apps.sapo.vn/auth/bizweb`. The redirect chain, read from the browser network log on `f1genz-seafoods` (installed) and `f1genz-luxury-fashion` (not installed):
+
+```text
+POST apps.sapo.vn/auth/bizweb
+-> {store}/admin/oauth/authorize?client_id=<App Store's own client>&scope=write_themes&redirect_uri=apps.sapo.vn/auth/bizweb/callback
+   (Sapo SSO login if needed)
+-> apps.sapo.vn/auth/bizweb/callback?code&hmac&store&timestamp&state
+-> apps.sapo.vn/<alias>/install
+-> {store}/admin/api/auth?api_key=<our SAPO_CLIENT_ID>
+-> Application URL (SAPO_INSTALL_CALLBACK_URL) ?hmac&store&timestamp   (no code, no permission screen)
+-> FRONTEND_URL/install/login?hmac&store&timestamp -> verify-hmac
+```
+
+Sapo shows no permission screen of its own on this path, for installed and not-installed stores alike: the app must send a store without an install to `/admin/oauth/authorize`. The approved Ảnh Nổi review app lands on Sapo's "Bạn đang cài đặt ứng dụng…" screen at this point. Before the `resolveSession` change, a store without an install got a handoff, `POST /api/auth/session/exchange` answered `401 App needs reinstall`, and the SPA showed "Xác thực không thành công".
 
 ## HMAC verification (admin launch)
 

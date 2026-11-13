@@ -78,7 +78,7 @@ export const buildAppEnv = (raw: WorkerEnv): AppEnv => {
 
     SAPO_CLIENT_ID: String(raw.SAPO_CLIENT_ID ?? ''),
     SAPO_CLIENT_SECRET: String(raw.SAPO_CLIENT_SECRET ?? ''),
-    SAPO_SCOPE: String(raw.SAPO_SCOPE ?? 'read_products,write_products,read_orders,write_content'),
+    SAPO_SCOPE: String(raw.SAPO_SCOPE ?? 'read_products,write_products,read_orders,write_content,read_themes,write_themes'),
     SAPO_INSTALL_CALLBACK_URL: String(
       raw.SAPO_INSTALL_CALLBACK_URL ?? 'https://api-sapo-reviews.f1genz.dev/api/oauth/install/callback',
     ),

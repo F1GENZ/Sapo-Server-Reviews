@@ -132,3 +132,21 @@ export interface OAuthTokenPayload {
 export interface SapoListResponse<T> {
   [key: string]: T[];
 }
+
+export interface SapoTheme {
+  id: number;
+  name: string;
+  role: string;
+  previewable?: boolean;
+  processing?: boolean;
+}
+
+export interface SapoThemeAssetMeta {
+  key: string;
+  size?: number;
+  modified_on?: string | null;
+}
+
+export interface SapoThemeAsset extends SapoThemeAssetMeta {
+  value?: string;
+}

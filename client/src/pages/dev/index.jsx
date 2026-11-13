@@ -2,26 +2,9 @@ import Link from "../../components/StoreLink";
 import AdminLayout from "../../components/layout/AdminLayout";
 import { getStoreDomain } from "../../common/AuthStorage";
 import { toast } from "../../common/toast";
-import {
-  Alert,
-  Breadcrumb,
-  Button,
-  Card,
-  Collapse,
-  Flex,
-  Tag,
-  Typography,
-} from "antd";
-import {
-  AppstoreOutlined,
-  CodeOutlined,
-  CopyOutlined,
-  HomeOutlined,
-  ProductOutlined,
-  SafetyCertificateOutlined,
-  StarOutlined,
-  WarningOutlined,
-} from "@ant-design/icons";
+import ThemeInstallCard from "./ThemeInstallCard";
+import { Alert, Breadcrumb, Button, Card, Collapse, Flex, Tag, Typography } from "antd";
+import { CopyOutlined, HomeOutlined } from "@ant-design/icons";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -45,6 +28,20 @@ const buildSnippets = ({ apiUrl, storeDomain }) => ({
   customer-phone="{{ customer.phone | escape }}"
 ></f1genz-reviews>`,
 
+  cardBadge: `<f1genz-rating-badge
+  product-id="{{ product.id }}"
+  storeDomain="${storeDomain}"
+></f1genz-rating-badge>`,
+
+  cardBadgeSsr: `{% if product.metafields.f1genz_reviews.rating_count %}
+<f1genz-rating-badge
+  product-id="{{ product.id }}"
+  storeDomain="${storeDomain}"
+  avg-rating="{{ product.metafields.f1genz_reviews.rating_avg }}"
+  review-count="{{ product.metafields.f1genz_reviews.rating_count }}"
+></f1genz-rating-badge>
+{% endif %}`,
+
   productPanels: `<f1genz-reviews-panel
   product-id="{{ product.id }}"
   storeDomain="${storeDomain}"
@@ -59,19 +56,12 @@ const buildSnippets = ({ apiUrl, storeDomain }) => ({
   customer-phone="{{ customer.phone | escape }}"
 ></f1genz-qna-panel>`,
 
-  cardBadge: `<f1genz-rating-badge
+  schemaComponent: `<f1genz-product-schema
   product-id="{{ product.id }}"
   storeDomain="${storeDomain}"
-></f1genz-rating-badge>`,
-
-  cardBadgeSsr: `{% if product.metafields.f1genz_reviews.rating_count %}
-<f1genz-rating-badge
-  product-id="{{ product.id }}"
-  storeDomain="${storeDomain}"
-  avg-rating="{{ product.metafields.f1genz_reviews.rating_avg }}"
-  review-count="{{ product.metafields.f1genz_reviews.rating_count }}"
-></f1genz-rating-badge>
-{% endif %}`,
+  product-name="{{ product.title | escape }}"
+  brand="{{ product.vendor | escape }}"
+></f1genz-product-schema>`,
 
   schema: `{% include 'f1genz-product-schema' %}`,
 
@@ -122,13 +112,6 @@ const buildSnippets = ({ apiUrl, storeDomain }) => ({
   storeDomain="${storeDomain}"
   count="6"
 ></f1genz-curated-slider>`,
-
-  schemaComponent: `<f1genz-product-schema
-  product-id="{{ product.id }}"
-  storeDomain="${storeDomain}"
-  product-name="{{ product.title | escape }}"
-  brand="{{ product.vendor | escape }}"
-></f1genz-product-schema>`,
 });
 
 const CodeBlock = ({ code }) => {
@@ -181,23 +164,16 @@ const CodeBlock = ({ code }) => {
   );
 };
 
-const buildDevSections = (snippets) => [
+const buildManualSteps = (snippets) => [
   {
     key: "assets",
-    label: (
-      <Flex align="center" gap={8}>
-        <CodeOutlined style={{ color: "#1677ff" }} />
-        <Text strong>1. Load asset global</Text>
-      </Flex>
-    ),
+    label: <Text strong>1. Loader CSS/JS (layout)</Text>,
     children: (
       <>
-        <Paragraph type="secondary" style={{ lineHeight: 1.7 }}>
-          Dán trước <Text code>{`</body>`}</Text> trong file layout chính của theme Sapo (.bwt).
-          Đoạn này đặt cấu hình runtime <Text code>{`{ apiUrl, storeDomain }`}</Text> (cùng cấu trúc app ghi vào metafield shop <Text code>f1genz.config</Text> khi cài đặt)
-          và tải CSS/JS storefront từ <Text code>apiUrl</Text>, không lấy từ domain Pages admin.
-          Nếu bản build admin chưa khai báo <Text code>VITE_STOREFRONT_API_URL</Text>, hãy thay <Text code>{API_URL_PLACEHOLDER}</Text> bằng host API của app.
-          <Text code>storeDomain</Text> luôn là tên miền <Text code>.mysapo.net</Text> của shop, không dùng tên miền riêng.
+        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          Dán trước <Text code>{`</body>`}</Text> trong layout chính. <Text code>apiUrl</Text> là host API của app, không phải domain Pages admin
+          (nếu bản build chưa có <Text code>VITE_STOREFRONT_API_URL</Text>, thay <Text code>{API_URL_PLACEHOLDER}</Text>).
+          <Text code>storeDomain</Text> luôn là tên miền <Text code>.mysapo.net</Text> của shop.
         </Paragraph>
         <CodeBlock code={snippets.assets} />
       </>
@@ -205,120 +181,73 @@ const buildDevSections = (snippets) => [
   },
   {
     key: "product-widget",
-    label: (
-      <Flex align="center" gap={8}>
-        <StarOutlined style={{ color: "#faad14" }} />
-        <Text strong>2. Trang chi tiết sản phẩm</Text>
-      </Flex>
-    ),
+    label: <Text strong>2. Khối đánh giá và hỏi đáp (trang sản phẩm)</Text>,
     children: (
       <>
-        <Paragraph type="secondary" style={{ lineHeight: 1.7 }}>
-          Dán vào vị trí muốn hiển thị khối đánh giá và hỏi đáp trong template sản phẩm.
-          Thường là dưới mô tả hoặc tab đánh giá. Snippet tổng này hỗ trợ cấu hình xếp dọc hoặc 2 tab trong trang Cấu hình.
+        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          Dán dưới mô tả hoặc tab đánh giá. Xếp dọc hay 2 tab do trang Cấu hình quyết định.
         </Paragraph>
         <CodeBlock code={snippets.productWidget} />
-        <Paragraph type="secondary" style={{ marginTop: 14, lineHeight: 1.7 }}>
-          Nếu theme cần tách đánh giá và hỏi đáp thành hai vị trí khác nhau, dùng bản panel riêng:
-        </Paragraph>
-        <CodeBlock code={snippets.productPanels} />
       </>
     ),
   },
   {
     key: "product-card",
-    label: (
-      <Flex align="center" gap={8}>
-        <AppstoreOutlined style={{ color: "#722ed1" }} />
-        <Text strong>3. Product card / vòng lặp sản phẩm</Text>
-      </Flex>
-    ),
+    label: <Text strong>3. Badge số sao (thẻ sản phẩm)</Text>,
     children: (
       <>
-        <Paragraph type="secondary" style={{ lineHeight: 1.7 }}>
-          Dán trong file product card của theme (.bwt) hoặc block item của trang collection/search.
-          Badge chỉ cần <Text code>product-id</Text> và <Text code>storeDomain</Text>; điểm trung bình và số đánh giá được tải theo lô từ API, không cần đọc metafield.
+        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          Dán sau tiêu đề trong product card hoặc vòng lặp collection. Ở đây chỉ dùng badge, không dán <Text code>f1genz-reviews</Text>.
         </Paragraph>
         <CodeBlock code={snippets.cardBadge} />
-        <Paragraph type="secondary" style={{ marginTop: 14, lineHeight: 1.7 }}>
-          Tuỳ chọn, để badge hiện ngay khi tải trang: truyền điểm từ metafield sản phẩm <Text code>f1genz_reviews.rating_avg</Text> / <Text code>rating_count</Text> do app ghi (chỉ in giá trị thô, có điều kiện <Text code>{`{% if %}`}</Text>).
-        </Paragraph>
-        <CodeBlock code={snippets.cardBadgeSsr} />
       </>
     ),
   },
   {
     key: "schema",
-    label: (
-      <Flex align="center" gap={8}>
-        <SafetyCertificateOutlined style={{ color: "#13c2c2" }} />
-        <Text strong>4. JSON-LD Product schema</Text>
-      </Flex>
-    ),
+    label: <Text strong>4. JSON-LD cho SEO (tuỳ chọn)</Text>,
     children: (
       <>
-        <Paragraph type="secondary" style={{ lineHeight: 1.7 }}>
-          Để công cụ tìm kiếm thấy điểm đánh giá và giá mà không cần chạy JavaScript, tạo file <Text code>snippets/f1genz-product-schema.bwt</Text> trong theme, dán nguyên nội dung dưới đây vào file rồi chèn bằng <Text code>{`{% include %}`}</Text> trong template sản phẩm.
+        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          Tạo <Text code>snippets/f1genz-product-schema.bwt</Text> với nội dung dưới, rồi chèn một dòng include trong template sản phẩm.
+          Snippet xuất <Text code>aggregateRating</Text> (từ metafield <Text code>f1genz_reviews</Text>, không có đánh giá thì không xuất) và <Text code>offers</Text> (giá VND, còn hàng/hết hàng).
+          Mỗi sản phẩm chỉ nên có một khối <Text code>aggregateRating</Text>: gỡ khối tương tự có sẵn trong theme.
+          Không dùng snippet thì script storefront tự dựng khối này; đặt <Text code>autoProductSchema: false</Text> trong cấu hình ở mục 1 để tắt.
         </Paragraph>
         <CodeBlock code={snippets.schemaFile} />
-        <Paragraph type="secondary" style={{ marginTop: 14, lineHeight: 1.7 }}>
-          Snippet xuất hai khối: <Text code>aggregateRating</Text> (đọc metafield <Text code>f1genz_reviews.rating_count</Text> và <Text code>rating_avg</Text> do app ghi; sản phẩm chưa có đánh giá đã duyệt thì không xuất gì) và <Text code>offers</Text> (giá lấy từ <Text code>product.price</Text>, tiền tệ VND, còn hàng hay hết hàng lấy từ <Text code>product.available</Text>).
-          Theme đã dán bản cũ của snippet không có khối <Text code>offers</Text> thì dán đè bằng bản trên.
-        </Paragraph>
-        <Paragraph type="secondary" style={{ marginTop: 14, lineHeight: 1.7 }}>
-          Chèn dòng sau vào template sản phẩm:
-        </Paragraph>
         <CodeBlock code={snippets.schema} />
-        <Paragraph type="secondary" style={{ marginTop: 14, lineHeight: 1.7 }}>
-          Mỗi sản phẩm chỉ nên có một khối JSON-LD <Text code>Product</Text> mang <Text code>aggregateRating</Text>: gỡ khối tương tự có sẵn trong theme.
-          Khi trang có <Text code>og:type</Text> là <Text code>product</Text> mà chưa có khối <Text code>Product</Text> nào chứa cả <Text code>aggregateRating</Text> và <Text code>offers</Text>, script storefront tự dựng thêm một khối trên trình duyệt; đặt <Text code>autoProductSchema: false</Text> trong cấu hình ở mục 1 để tắt.
-        </Paragraph>
-        <Paragraph type="secondary" style={{ marginTop: 14, lineHeight: 1.7 }}>
-          Nếu không thể thêm file snippet, dùng phần tử <Text code>f1genz-product-schema</Text> (dựng JSON-LD trên trình duyệt). Chỉ dùng một trong hai cách để không có hai khối <Text code>aggregateRating</Text>.
-          Phần tử còn đọc <Text code>price</Text>, <Text code>currency</Text>, <Text code>sku</Text>, <Text code>mpn</Text>, <Text code>gtin</Text>, <Text code>description</Text>, <Text code>product-image</Text>, <Text code>product-url</Text>, <Text code>availability</Text> và <Text code>max-reviews</Text>.
-        </Paragraph>
-        <CodeBlock code={snippets.schemaComponent} />
       </>
     ),
   },
   {
     key: "slider",
-    label: (
-      <Flex align="center" gap={8}>
-        <StarOutlined style={{ color: "#fadb14" }} />
-        <Text strong>5. Slider đánh giá nổi bật (tuỳ chọn)</Text>
-      </Flex>
-    ),
+    label: <Text strong>5. Slider đánh giá nổi bật (tuỳ chọn)</Text>,
     children: (
       <>
-        <Paragraph type="secondary" style={{ lineHeight: 1.7 }}>
-          Hàng thẻ đánh giá nổi bật của chính sản phẩm đang xem. Dán dưới khối đánh giá ở template sản phẩm; cần <Text code>product-id</Text> và <Text code>storeDomain</Text>.
-          Bật dải đánh giá nổi bật và số đánh giá trong dải (5–15) chỉnh trong <Text strong>Cấu hình → Hiển thị</Text>; thuộc tính <Text code>count</Text> chỉ là gợi ý, máy chủ vẫn áp dụng cấu hình của shop.
+        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          Dán dưới khối đánh giá. Bật dải và chọn 5-15 đánh giá tại <Text strong>Cấu hình → Hiển thị</Text>; thuộc tính <Text code>count</Text> chỉ là gợi ý.
         </Paragraph>
         <CodeBlock code={snippets.slider} />
       </>
     ),
   },
   {
-    key: "performance",
-    label: (
-      <Flex align="center" gap={8}>
-        <WarningOutlined style={{ color: "#fa8c16" }} />
-        <Text strong>6. Tối ưu responsive / tốc độ</Text>
-      </Flex>
-    ),
+    key: "advanced",
+    label: <Text strong>6. Tuỳ chọn nâng cao</Text>,
     children: (
       <>
-        <Paragraph type="secondary" style={{ lineHeight: 1.7 }}>
-          Chỉ load asset global một lần ở layout. Trang listing chỉ nên dùng rating badge; widget đầy đủ chỉ đặt ở trang sản phẩm.
-          Khi chọn chế độ 2 tab trong Cấu hình, Q&A sẽ chỉ gọi API sau khi khách mở tab Hỏi đáp.
+        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          Đánh giá và hỏi đáp ở hai vị trí khác nhau (ví dụ mỗi mục một tab của theme): dùng hai panel thay cho <Text code>f1genz-reviews</Text> ở mục 2.
         </Paragraph>
-        <Flex vertical gap={8}>
-          <Text type="secondary">1. Không dán <Text code>f1genz-reviews</Text> trong product card hoặc collection loop.</Text>
-          <Text type="secondary">2. Product card dùng <Text code>f1genz-rating-badge</Text> để tránh tải review list hàng loạt.</Text>
-          <Text type="secondary">3. Giữ khung ảnh/card sản phẩm có kích thước ổn định để tránh layout shift trên mobile.</Text>
-          <Text type="secondary">4. Nếu theme có tab sản phẩm riêng, đặt widget trong tab đang visible hoặc đảm bảo tab không lazy-destroy DOM.</Text>
-        </Flex>
+        <CodeBlock code={snippets.productPanels} />
+        <Paragraph type="secondary" style={{ margin: "12px 0 0" }}>
+          Badge có sẵn điểm khi tải trang, thay cho badge ở mục 3: in giá trị thô từ metafield <Text code>f1genz_reviews</Text> do app ghi.
+        </Paragraph>
+        <CodeBlock code={snippets.cardBadgeSsr} />
+        <Paragraph type="secondary" style={{ margin: "12px 0 0" }}>
+          Không tạo được file snippet ở mục 4: dùng phần tử dưới, dựng JSON-LD trên trình duyệt. Chỉ dùng một trong hai cách để không có hai khối <Text code>aggregateRating</Text>.
+        </Paragraph>
+        <CodeBlock code={snippets.schemaComponent} />
       </>
     ),
   },
@@ -331,103 +260,54 @@ const DevGuidePage = () => {
   });
 
   return (
-  <AdminLayout>
-    <div className="f1g-dev-page">
-      <Breadcrumb
-        items={[
-          { title: <Link to="/"><HomeOutlined /></Link> },
-          { title: "Hướng dẫn kỹ thuật" },
-        ]}
-        style={{ marginBottom: 16 }}
-      />
+    <AdminLayout>
+      <div className="f1g-dev-page">
+        <Breadcrumb
+          items={[{ title: <Link to="/"><HomeOutlined /></Link> }, { title: "Hướng dẫn kỹ thuật" }]}
+          style={{ marginBottom: 16 }}
+        />
 
-      <Flex align="flex-start" justify="space-between" gap={16} wrap="wrap" style={{ marginBottom: 18 }}>
-        <div style={{ minWidth: 0 }}>
-          <Title level={4} style={{ margin: 0 }}>Hướng dẫn kỹ thuật</Title>
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            Tài liệu kỹ thuật để dev theme gắn widget Review/Q&A, badge rating và JSON-LD.
-          </Text>
-        </div>
-        <Link to="/guide">
-          <Tag color="blue" style={{ padding: "4px 10px", margin: 0 }}>Hướng dẫn vận hành</Tag>
-        </Link>
-      </Flex>
+        <Flex align="flex-start" justify="space-between" gap={16} wrap="wrap" style={{ marginBottom: 16 }}>
+          <div style={{ minWidth: 0 }}>
+            <Title level={4} style={{ margin: 0 }}>Hướng dẫn kỹ thuật</Title>
+            <Text type="secondary" style={{ fontSize: 13 }}>Cài widget vào theme tự động, hoặc dán tay.</Text>
+          </div>
+          <Link to="/guide">
+            <Tag color="blue" style={{ padding: "4px 10px", margin: 0 }}>Hướng dẫn vận hành</Tag>
+          </Link>
+        </Flex>
 
-      <Alert
-        type="warning"
-        showIcon
-        icon={<WarningOutlined />}
-        style={{ marginBottom: 16 }}
-        message="Không dán code trùng nhiều lần"
-        description="Mỗi theme chỉ nên load CSS/JS global một lần trong layout. Product widget đặt ở trang sản phẩm; product card/listing chỉ dùng rating badge để giữ tốc độ responsive. Frontend admin Pages domain không phải storefront API source; storefront đọc host chuẩn từ config do backend publish."
-      />
+        <ThemeInstallCard />
 
-      <div
-        className="f1g-dev-guide-grid"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) 300px",
-          gap: 16,
-          alignItems: "start",
-          minWidth: 0,
-        }}
-      >
-        <Card size="small" style={{ borderRadius: 12, minWidth: 0 }} styles={{ body: { padding: "16px 20px", minWidth: 0 } }}>
-          <Collapse
-            defaultActiveKey={["assets", "product-widget", "performance"]}
-            expandIconPosition="end"
-            items={buildDevSections(snippets)}
-          />
+        <Card size="small" style={{ borderRadius: 12, marginBottom: 16 }} styles={{ body: { padding: "12px 16px" } }}>
+          <Text strong>Dán tay </Text>
+          <Text type="secondary">khi theme tuỳ biến nhiều và cài tự động không phù hợp. Mỗi thành phần chỉ dán một lần.</Text>
+          <Collapse ghost expandIconPosition="end" items={buildManualSteps(snippets)} style={{ marginTop: 8 }} />
         </Card>
 
-        <Flex vertical gap={16} style={{ minWidth: 0 }}>
-          <Card size="small" style={{ borderRadius: 12, minWidth: 0 }} styles={{ body: { padding: "16px 18px", minWidth: 0 } }}>
-            <Flex align="center" gap={8} style={{ marginBottom: 12 }}>
-              <ProductOutlined style={{ color: "#1677ff" }} />
-              <Text strong>Kiểm tra sau khi gắn</Text>
+        <Alert
+          type="info"
+          showIcon
+          message="Kiểm tra sau khi gắn"
+          description={
+            <Flex vertical gap={4}>
+              <Text type="secondary">Mở sản phẩm có đánh giá đã duyệt: khối đánh giá hiện, badge hiện ở trang danh sách.</Text>
+              <Text type="secondary">Console không có lỗi <Text code>[f1genz-storefront]</Text>; <Text code>No API URL</Text> nghĩa là thiếu <Text code>apiUrl</Text> ở mục 1.</Text>
+              <Text type="secondary">Rich Results Test thấy <Text code>Offers</Text> và <Text code>AggregateRating</Text> hợp lệ.</Text>
+              <Text type="secondary">Đổi theme thì chạy lại Cài tự động hoặc dán lại các đoạn trên.</Text>
             </Flex>
-            <Flex vertical gap={10}>
-              <Text type="secondary">1. Mở một product có review đã duyệt.</Text>
-              <Text type="secondary">2. Kiểm tra Network chỉ có batch summary cho listing, không gọi lẻ quá nhiều.</Text>
-              <Text type="secondary">3. Kiểm tra form theo đúng cấu hình bắt buộc trong admin.</Text>
-              <Text type="secondary">4. Test Rich Results để chắc schema có cả giá (<Text code>Offers</Text>) và điểm đánh giá (<Text code>AggregateRating</Text>) hợp lệ.</Text>
-              <Text type="secondary">5. Với chế độ 2 tab, mở tab Hỏi đáp và kiểm tra Q&A mới bắt đầu gọi API.</Text>
-              <Text type="secondary">6. Mở Console của trình duyệt: không được có lỗi <Text code>[f1genz-storefront]</Text>; lỗi <Text code>No API URL</Text> nghĩa là đoạn ở mục 1 chưa có <Text code>apiUrl</Text>.</Text>
-              <Text type="secondary">7. Nếu đổi theme, gắn lại code thủ công ở theme mới theo đúng các snippet phía trên.</Text>
-            </Flex>
-          </Card>
-        </Flex>
-      </div>
-    </div>
-
-    <style>
-      {`
-        .f1g-dev-page {
-          max-width: 100%;
-          min-width: 0;
-          overflow-x: clip;
-        }
-        .f1g-dev-page .ant-alert-description,
-        .f1g-dev-page .ant-typography {
-          overflow-wrap: anywhere;
-        }
-        @media (max-width: 960px) {
-          .f1g-dev-guide-grid {
-            grid-template-columns: 1fr !important;
           }
-        }
-        .f1g-dev-guide-grid,
-        .f1g-dev-guide-grid .ant-card,
-        .f1g-dev-guide-grid .ant-card-body,
-        .f1g-dev-guide-grid .ant-collapse,
-        .f1g-dev-guide-grid .ant-collapse-item,
-        .f1g-dev-guide-grid .ant-collapse-content,
-        .f1g-dev-guide-grid .ant-collapse-content-box {
-          min-width: 0;
-        }
-      `}
-    </style>
-  </AdminLayout>
+        />
+      </div>
+
+      <style>
+        {`
+          .f1g-dev-page { max-width: 100%; min-width: 0; overflow-x: clip; }
+          .f1g-dev-page .ant-alert-description,
+          .f1g-dev-page .ant-typography { overflow-wrap: anywhere; }
+        `}
+      </style>
+    </AdminLayout>
   );
 };
 

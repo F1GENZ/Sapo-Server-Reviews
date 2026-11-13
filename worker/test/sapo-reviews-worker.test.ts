@@ -951,6 +951,21 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     expect(verifyBody.storeDomain).toBe(STORE_DOMAIN);
     expect(verifyBody.handoffCode).toBeTruthy();
 
+    const newStore = 'chua-cai-dat.mysapo.net';
+    const newMsg = `store=${newStore}&timestamp=${ts}`;
+    const newHmac = createHmac('sha256', appEnv.SAPO_CLIENT_SECRET).update(newMsg, 'utf8').digest('base64');
+    const newVerifyRes = await SELF.fetch(
+      `https://api-sapo-reviews.f1genz.dev/api/oauth/install/login/verify-hmac?${newMsg}&hmac=${encodeURIComponent(newHmac)}`,
+    );
+    expect(newVerifyRes.status).toBe(200);
+    const newVerifyBody = (await newVerifyRes.json()) as { url?: string; reason?: string; handoffCode?: string };
+    expect(newVerifyBody.reason).toBe('install_required');
+    expect(newVerifyBody.handoffCode).toBeUndefined();
+    expect(newVerifyBody.url).toContain(`https://${newStore}/admin/oauth/authorize`);
+    expect(decodeURIComponent(newVerifyBody.url || '')).toContain(
+      'https://api-sapo-reviews.f1genz.dev/api/oauth/install/callback',
+    );
+
     const exchangeRes = await SELF.fetch('https://api-sapo-reviews.f1genz.dev/api/auth/session/exchange', {
       method: 'POST',
       headers: {

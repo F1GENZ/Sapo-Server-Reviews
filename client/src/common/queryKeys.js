@@ -21,5 +21,6 @@ export const shopQueryKeys = {
   outboundEvents: (storeDomain) => scopedKey(storeDomain, "outbound", "events"),
   outboundDeliveries: (storeDomain, endpointId, page) =>
     scopedKey(storeDomain, "outbound", "deliveries", endpointId || "none", page || 0),
+  installThemes: (storeDomain) => scopedKey(storeDomain, "theme-install", "themes"),
   aiStatus: (storeDomain) => scopedKey(storeDomain, "ai", "status"),
 };

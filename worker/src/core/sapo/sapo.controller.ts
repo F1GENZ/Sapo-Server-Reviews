@@ -128,7 +128,7 @@ export class SapoController {
     const params = this.hmacVerifier.verifyLaunchQuery(rawQuery);
     const storeDomain = normalizeStoreDomainCandidate(params.get('store')) || undefined;
     if (!storeDomain) throw new BadRequestException('Missing store in launch parameters');
-    return this.sessions.createHandoff(storeDomain, '/dashboard');
+    return this.sapo.resolveSession(storeDomain, '/dashboard');
   }
 
   @Get('/oauth/install/login/callback')

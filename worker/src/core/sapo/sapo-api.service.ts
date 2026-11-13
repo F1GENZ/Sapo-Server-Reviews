@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException, Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ForbiddenException, Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { APP_ENV } from '../config/app-config.module';
 import type { AppEnv } from '../config/env.schema';
 import type {
@@ -11,6 +11,9 @@ import type {
   SapoMetafieldUpdatePayload,
   SapoProduct,
   SapoShop,
+  SapoTheme,
+  SapoThemeAsset,
+  SapoThemeAssetMeta,
   SapoWebhook,
 } from './sapo.types';
 import { normalizeMetafieldPayload } from './sapo.types';
@@ -360,6 +363,74 @@ export class SapoApiService {
   async deleteWebhook(storeDomain: string, accessToken: string, webhookId: string): Promise<void> {
     assertNumericId(webhookId, 'webhookId');
     await this.fetch(storeDomain, accessToken, `/webhooks/${webhookId}.json`, { method: 'DELETE' });
+  }
+
+  private async themeRequest(storeDomain: string, accessToken: string, path: string, init: RequestInit = {}): Promise<Response> {
+    try {
+      return await this.fetch(storeDomain, accessToken, path, init);
+    } catch (error) {
+      if (error instanceof ResponseError && (error.status === 401 || error.status === 403)) {
+        throw new ForbiddenException({
+          code: 'theme_scope_missing',
+          message: 'Ứng dụng chưa được cấp quyền đọc/ghi theme. Cần cấp quyền lại cho ứng dụng.',
+        });
+      }
+      throw error;
+    }
+  }
+
+  async listThemes(storeDomain: string, accessToken: string): Promise<SapoTheme[]> {
+    const res = await this.themeRequest(storeDomain, accessToken, '/themes.json');
+    const payload = await res.json() as { themes?: SapoTheme[] };
+    return payload.themes ?? [];
+  }
+
+  async listThemeAssets(storeDomain: string, accessToken: string, themeId: string): Promise<SapoThemeAssetMeta[]> {
+    assertNumericId(themeId, 'themeId');
+    const res = await this.themeRequest(storeDomain, accessToken, `/themes/${themeId}/assets.json`);
+    const payload = await res.json() as { assets?: SapoThemeAssetMeta[] };
+    return payload.assets ?? [];
+  }
+
+  async getThemeAsset(storeDomain: string, accessToken: string, themeId: string, key: string): Promise<SapoThemeAsset | null> {
+    assertNumericId(themeId, 'themeId');
+    const qp = new URLSearchParams({ key });
+    try {
+      const res = await this.themeRequest(storeDomain, accessToken, `/themes/${themeId}/assets.json?${qp.toString()}`);
+      const payload = await res.json() as { asset?: SapoThemeAsset };
+      return payload.asset ?? null;
+    } catch (error) {
+      if (error instanceof ResponseError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  async putThemeAsset(storeDomain: string, accessToken: string, themeId: string, key: string, value: string): Promise<void> {
+    assertNumericId(themeId, 'themeId');
+    try {
+      await this.themeRequest(storeDomain, accessToken, `/themes/${themeId}/assets.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset: { key, value } }),
+      });
+    } catch (error) {
+      if (error instanceof ResponseError) {
+        this.logger.warn(`Sapo putThemeAsset failed store=${storeDomain} theme=${themeId} key=${key} status=${error.status}`);
+        throw new BadRequestException({ message: 'Sapo ghi file theme thất bại', status: error.status, key });
+      }
+      throw error;
+    }
+  }
+
+  async deleteThemeAsset(storeDomain: string, accessToken: string, themeId: string, key: string): Promise<void> {
+    assertNumericId(themeId, 'themeId');
+    const qp = new URLSearchParams({ key });
+    try {
+      await this.themeRequest(storeDomain, accessToken, `/themes/${themeId}/assets.json?${qp.toString()}`, { method: 'DELETE' });
+    } catch (error) {
+      if (error instanceof ResponseError && error.status === 404) return;
+      throw error;
+    }
   }
 }
 

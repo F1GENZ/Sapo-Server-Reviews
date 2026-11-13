@@ -81,7 +81,7 @@
     "CORS_ALLOWED_ORIGINS": "https://reviews-sapo.f1genz.dev,https://f1genz-sapo-reviews-admin.pages.dev",
     "REQUEST_BODY_LIMIT": "1mb",
     "WEBHOOK_BODY_LIMIT": "256kb",
-    "SAPO_SCOPE": "read_products,write_products,read_orders,write_content",
+    "SAPO_SCOPE": "read_products,write_products,read_orders,write_content,read_themes,write_themes",
     "SAPO_INSTALL_CALLBACK_URL": "https://api-sapo-reviews.f1genz.dev/api/oauth/install/callback",
     "SAPO_LOGIN_CALLBACK_URL": "https://api-sapo-reviews.f1genz.dev/api/oauth/install/login/callback",
     "SAPO_USE_CONNECT_TOKEN": "false",

@@ -33,7 +33,7 @@ Every variable the server reads is parsed and validated once at boot by `loadEnv
 |---|---|---|---|
 | `SAPO_CLIENT_ID` | empty | required | Not a placeholder. |
 | `SAPO_CLIENT_SECRET` | empty | required | Verifies the admin launch HMAC and authenticates the code exchange. Not a placeholder. |
-| `SAPO_SCOPE` | `read_products,write_products,read_orders` | explicit | Whitespace or commas are accepted and normalized to a comma list. |
+| `SAPO_SCOPE` | `read_products,write_products,read_orders` | explicit | Whitespace or commas are accepted and normalized to a comma list. Production adds `write_content` and `read_themes,write_themes`; the theme scopes are required by the one-click theme install (`/api/admin/theme-install/*`). A store installed before they were added must re-authorize to receive them. |
 | `SAPO_INSTALL_CALLBACK_URL` | empty | required, HTTPS | Absolute URL, `{API}/api/oauth/install/callback`. |
 | `SAPO_LOGIN_CALLBACK_URL` | empty | required, HTTPS | Absolute URL, `{API}/api/oauth/install/login/callback`. |
 | `SAPO_API_MAX_CONCURRENT` | `4` | explicit | Integer >= 1. Per-store concurrent foreground Sapo API calls. |

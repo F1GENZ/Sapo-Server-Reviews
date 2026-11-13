@@ -294,6 +294,9 @@ function adminApi(state, overrides = {}) {
     }
     if (pathname === "/api/admin/dashboard/overview") return ok(overview(state));
     if (pathname === "/api/admin/products" && method === "GET") return ok({ products: PRODUCTS, total: PRODUCTS.length });
+    if (pathname === "/api/admin/theme-install/themes" && method === "GET") {
+      return ok([{ id: "1001", name: "Theme demo", role: "main", processing: false }]);
+    }
     if (pathname === "/api/admin/ops/health") {
       return ok({
         storeDomain: STORE,
@@ -1186,6 +1189,13 @@ async function main() {
       await assertNoHorizontalOverflow(page, "/dev with every panel open");
     });
 
+    await scenario("G4", "the Dev guide lists the store's themes for the one-click install", async ({ page, requests }) => {
+      await go(page, withStore("/dev"));
+      await expectText(page, "Theme demo", "theme name in the install list");
+      await expectVisible(page.getByRole("button", { name: "Xem kế hoạch" }), "plan button");
+      assert(requests.some((r) => r.pathname === "/api/admin/theme-install/themes"), "the theme list was not requested");
+    });
+
     console.log("\n--- labels and click targets ---");
     await scenario("C1", "every link on the contact page is a click target of at least 24 px", async ({ page }) => {
       await go(page, withStore("/contact"));
@@ -1282,6 +1292,22 @@ async function main() {
       }));
       assert.equal(stored.token, "launch-session-token");
       assert.ok(!/auth_session_token/.test(stored.cookie), "the session token was written to a JS-readable cookie");
+    });
+
+    await scenario("A4b", "a signed launch for a store without an install navigates top-level to the Sapo install screen", { auth: false }, async ({ page, requests }) => {
+      const authorizeUrl = `https://${STORE}/admin/oauth/authorize?client_id=e2e&state=sapo_oauth_install`;
+      let navigated = null;
+      await page.route(/^https:\/\/e2e-shop\.mysapo\.net\/.*/, async (route) => {
+        navigated = route.request().url();
+        await route.fulfill({ status: 200, contentType: "text/html", body: "<title>authorize</title>" });
+      });
+      await page.context().route("**/api/oauth/install/login/verify-hmac**", (route) =>
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ url: authorizeUrl, reason: "install_required" }) }),
+      );
+      await go(page, `/?hmac=Zm9v%3D&store=${STORE}&timestamp=1700000000`);
+      await waitUntil(() => navigated !== null, { timeout: 8000 });
+      assert.equal(navigated, authorizeUrl);
+      assert(!requests.some((r) => r.pathname === "/api/auth/session/exchange"), "exchange attempted for a store without an install");
     });
 
     await scenario("A5", "an invalid or expired launch URL shows the launch error and the login form", { auth: false }, async ({ page, requests }) => {
