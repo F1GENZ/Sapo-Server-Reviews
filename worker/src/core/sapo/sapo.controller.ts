@@ -20,6 +20,7 @@ import { isTrustedUnsafeOrigin } from '../common/security/origin-policy';
 import { clientFingerprint } from '../common/security/client-fingerprint';
 import { normalizeStoreDomainCandidate } from '../common/security/public-rate-limit';
 import { ShopAuthGuard } from '../common/guards/shop-auth.guard';
+import { buildSapoAdminAppUrl } from './admin-app-url';
 import { SapoService, type AuthStartResponse, type HandoffResponse } from './sapo.service';
 import { HmacVerifierService } from './hmac-verifier.service';
 import { SessionService } from './session.service';
@@ -68,12 +69,38 @@ export class SapoController {
     );
   }
 
-  private async finishAuthFlow(req: Request, res: Response, response: AuthFlowResponse): Promise<AuthFlowResponse | undefined> {
+  private async runCallback(
+    req: Request,
+    res: Response,
+    code: string,
+    state: string | undefined,
+    defaultFlow: 'install' | 'login',
+  ): Promise<AuthFlowResponse | undefined> {
+    const peeked = await this.sapo.peekStateFlow?.(state);
+    const flow = peeked === 'install' || peeked === 'login' ? peeked : defaultFlow;
+    const response =
+      flow === 'install'
+        ? await this.sapo.processInstallCallback(code, state)
+        : await this.sapo.processLoginCallback(code, state);
+    return this.finishAuthFlow(req, res, response, flow);
+  }
+
+  private async finishAuthFlow(
+    req: Request,
+    res: Response,
+    response: AuthFlowResponse,
+    flow: 'install' | 'login',
+  ): Promise<AuthFlowResponse | undefined> {
     const shouldRedirect =
       req.method === 'POST' ? wantsBrowserRedirect(req) : !wantsJsonResponse(req);
     if (!shouldRedirect) return response;
     if ('url' in response) {
       res.redirect(302, response.url);
+      return undefined;
+    }
+    const adminUrl = flow === 'install' ? buildSapoAdminAppUrl(response.storeDomain) : null;
+    if (adminUrl) {
+      res.redirect(302, adminUrl);
       return undefined;
     }
     const lifecycleGeneration = await this.sapo.getLifecycleGeneration(response.storeDomain);
@@ -139,13 +166,7 @@ export class SapoController {
     @Query('state') state?: string,
   ) {
     await this.assertAuthRate(req, 'oauth-callback');
-    const stateVal = firstQuery(state);
-    const flow = await this.sapo.peekStateFlow?.(stateVal);
-    const response =
-      flow === 'install'
-        ? await this.sapo.processInstallCallback(firstQuery(code) || '', stateVal)
-        : await this.sapo.processLoginCallback(firstQuery(code) || '', stateVal);
-    return this.finishAuthFlow(req, res, response);
+    return this.runCallback(req, res, firstQuery(code) || '', firstQuery(state), 'login');
   }
 
   @Post('/oauth/install/login/callback')
@@ -156,13 +177,7 @@ export class SapoController {
     @Body('state') state?: string,
   ) {
     await this.assertAuthRate(req, 'oauth-callback');
-    const stateVal = firstQuery(state);
-    const flow = await this.sapo.peekStateFlow?.(stateVal);
-    const response =
-      flow === 'install'
-        ? await this.sapo.processInstallCallback(firstQuery(code) || '', stateVal)
-        : await this.sapo.processLoginCallback(firstQuery(code) || '', stateVal);
-    return this.finishAuthFlow(req, res, response);
+    return this.runCallback(req, res, firstQuery(code) || '', firstQuery(state), 'login');
   }
 
   @Get('/oauth/install/start')
@@ -210,13 +225,7 @@ export class SapoController {
       }
       return res.redirect(302, this.env.FRONTEND_URL || '/');
     }
-    const stateVal = firstQuery(state);
-    const flow = await this.sapo.peekStateFlow?.(stateVal);
-    const response =
-      flow === 'login'
-        ? await this.sapo.processLoginCallback(authCode, stateVal)
-        : await this.sapo.processInstallCallback(authCode, stateVal);
-    return this.finishAuthFlow(req, res, response);
+    return this.runCallback(req, res, authCode, firstQuery(state), 'install');
   }
 
   @Post('/oauth/install/callback')
@@ -227,13 +236,7 @@ export class SapoController {
     @Body('state') state?: string,
   ) {
     await this.assertAuthRate(req, 'oauth-install');
-    const stateVal = firstQuery(state);
-    const flow = await this.sapo.peekStateFlow?.(stateVal);
-    const response =
-      flow === 'login'
-        ? await this.sapo.processLoginCallback(firstQuery(code) || '', stateVal)
-        : await this.sapo.processInstallCallback(firstQuery(code) || '', stateVal);
-    return this.finishAuthFlow(req, res, response);
+    return this.runCallback(req, res, firstQuery(code) || '', firstQuery(state), 'install');
   }
 
   @Get('/oauth/install/webhooks')

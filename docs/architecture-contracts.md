@@ -61,7 +61,7 @@ Modules are wired in `src/app.module.ts`.
 | Method | Path | Auth | Contract |
 |---|---|---|---|
 | `GET` | `/api/oauth/install/start` | public, auth rate limit | Returns an install authorize URL for `storeDomain` as JSON for API clients (`Accept: application/json`, `X-Requested-With`, or `format=json`); anything else, including a browser navigation, gets `302` to that URL. |
-| `GET`/`POST` | `/api/oauth/install/callback` | public, auth rate limit | Dispatches on the state's flow: an `install` state exchanges the code, persists the install and returns a handoff; a `login` state completes a login instead. Response is JSON, or `302` to `FRONTEND_URL` for browsers. |
+| `GET`/`POST` | `/api/oauth/install/callback` | public, auth rate limit | Dispatches on the state's flow: an `install` state exchanges the code, persists the install and returns a handoff; a `login` state completes a login instead. Response is JSON for API clients. For browsers an `install` flow gets `302` to `https://{store}/admin/apps/<handle>` (stores matching `*.mysapo.net` only; any other store value falls back to `FRONTEND_URL` with `handoff_code`), and a `login` flow gets `302` to `FRONTEND_URL` with `handoff_code`. |
 | `GET` | `/api/oauth/install/login`, `/api/oauth/install/login/entry` | public, auth rate limit | Start a login flow. |
 | `GET` | `/api/oauth/install/login/verify-hmac` | public, auth rate limit | Verify the signed launch query and return a handoff; no `hmac` starts login; invalid `hmac` is `401`. |
 | `GET`/`POST` | `/api/oauth/install/login/callback` | public, auth rate limit | Dispatches on the state's flow: a `login` state returns a handoff or an install URL; an `install` state completes the install instead. |

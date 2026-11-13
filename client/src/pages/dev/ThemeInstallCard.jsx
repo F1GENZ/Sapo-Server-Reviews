@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Card, Checkbox, Flex, List, Modal, Popconfirm, Tag, Typography } from "antd";
+import { Alert, Button, Card, Checkbox, Flex, List, Modal, Popconfirm, Select, Tag, Typography } from "antd";
 import { ThunderboltOutlined } from "@ant-design/icons";
 import {
   applyThemeInstall,
@@ -9,7 +9,7 @@ import {
   uninstallThemeInstall,
 } from "../../common/ApiService";
 import { getStoreDomain } from "../../common/AuthStorage";
-import { navigateTopLevel } from "../../common/authFlow";
+import { navigateTopLevel, parseStoreDomainInput } from "../../common/authFlow";
 import { getErrorMessage } from "../../common/getErrorMessage";
 import { shopQueryKeys } from "../../common/queryKeys";
 import { toast } from "../../common/toast";
@@ -81,6 +81,8 @@ const ThemeInstallCard = () => {
   const [plan, setPlan] = useState(null);
   const [liveAck, setLiveAck] = useState(false);
   const [lastResult, setLastResult] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const [appliedTheme, setAppliedTheme] = useState(null);
 
   const themesQuery = useQuery({
     queryKey: shopQueryKeys.installThemes(storeDomain),
@@ -88,6 +90,11 @@ const ThemeInstallCard = () => {
     enabled: !!storeDomain,
     retry: false,
   });
+
+  const themes = themesQuery.data ?? [];
+  const unpublished = themes.filter((t) => t.role !== "main" && !t.processing);
+  const chosenId = themes.some((t) => t.id === selectedId) ? selectedId : (unpublished[0]?.id ?? null);
+  const chosen = themes.find((t) => t.id === chosenId) ?? null;
 
   const planMutation = useMutation({
     mutationFn: planThemeInstall,
@@ -101,9 +108,13 @@ const ThemeInstallCard = () => {
 
   const applyMutation = useMutation({
     mutationFn: applyThemeInstall,
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
       setPlan(null);
       setLastResult(result);
+      setAppliedTheme({
+        id: String(variables.themeId),
+        role: themes.find((t) => String(t.id) === String(variables.themeId))?.role ?? "unpublished",
+      });
       toast.success("Đã cài đặt vào theme");
       queryClient.invalidateQueries({ queryKey: shopQueryKeys.installThemes(storeDomain) });
     },
@@ -135,6 +146,13 @@ const ThemeInstallCard = () => {
   const needsScope = errorCode(themesQuery.error) === "theme_scope_missing";
   const inserts = plan?.edits.filter((e) => e.status === "insert") ?? [];
   const isLive = plan?.role === "main";
+  const previewStore = parseStoreDomainInput(storeDomain);
+  const previewUrl =
+    previewStore && appliedTheme
+      ? appliedTheme.role === "main"
+        ? `https://${previewStore}/`
+        : `https://${previewStore}/?previewThemeId=${encodeURIComponent(appliedTheme.id)}`
+      : null;
 
   return (
     <Card size="small" style={{ borderRadius: 12, marginBottom: 16 }} styles={{ body: { padding: "16px 20px" } }}>
@@ -143,7 +161,7 @@ const ThemeInstallCard = () => {
         <Text strong>Cài tự động vào theme</Text>
       </Flex>
       <Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        Chọn theme, hệ thống tự tìm vị trí gắn loader, khối đánh giá và badge số sao, cho bạn xem trước từng thay đổi rồi mới ghi. Có thể gỡ lại bất cứ lúc nào.
+        Hệ thống tự tìm vị trí gắn loader, khối đánh giá và badge số sao, cho bạn xem trước từng thay đổi rồi mới ghi. Mặc định chọn theme chưa xuất bản để bạn xem thử trước khi áp dụng cho cửa hàng thật. Có thể gỡ lại bất cứ lúc nào.
       </Paragraph>
 
       {needsScope ? (
@@ -157,45 +175,66 @@ const ThemeInstallCard = () => {
       ) : themesQuery.isError ? (
         <Alert type="error" showIcon message={getErrorMessage(themesQuery.error, "Không tải được danh sách theme")} />
       ) : (
-        <List
-          loading={themesQuery.isLoading}
-          dataSource={themesQuery.data ?? []}
-          locale={{ emptyText: "Cửa hàng chưa có theme" }}
-          renderItem={(theme) => (
-            <List.Item
-              actions={[
-                <Button
-                  key="plan"
-                  type="primary"
-                  size="small"
-                  disabled={theme.processing}
-                  loading={planMutation.isPending && planMutation.variables === theme.id}
-                  onClick={() => planMutation.mutate(theme.id)}
-                >
-                  Xem kế hoạch
-                </Button>,
-                <Popconfirm
-                  key="uninstall"
-                  title="Gỡ F1GENZ Reviews khỏi theme này?"
-                  description="Chỉ xoá các dòng include và snippet do hệ thống tạo."
-                  okText="Gỡ"
-                  cancelText="Huỷ"
-                  onConfirm={() => uninstallMutation.mutate(theme.id)}
-                >
-                  <Button size="small" danger disabled={theme.processing} loading={uninstallMutation.isPending && uninstallMutation.variables === theme.id}>
-                    Gỡ
-                  </Button>
-                </Popconfirm>,
-              ]}
+        <Flex vertical gap={12}>
+          {!themesQuery.isLoading && themes.length > 0 && unpublished.length === 0 ? (
+            <Alert
+              type="info"
+              showIcon
+              message="Cửa hàng chưa có theme chưa xuất bản"
+              description="Hãy nhân bản theme đang dùng trong Sapo (Giao diện) để có bản xem trước an toàn rồi quay lại đây. Hoặc tự chọn theme đang xuất bản bên dưới: thay đổi sẽ hiện ngay trên cửa hàng."
+            />
+          ) : null}
+          <Select
+            aria-label="Chọn theme"
+            placeholder="Chọn theme"
+            style={{ width: "100%", maxWidth: 480 }}
+            loading={themesQuery.isLoading}
+            value={chosenId}
+            onChange={setSelectedId}
+            notFoundContent="Cửa hàng chưa có theme"
+            options={themes.map((theme) => ({
+              value: theme.id,
+              disabled: theme.processing,
+              label: (
+                <Flex align="center" gap={8} wrap="wrap">
+                  <Text>{theme.name}</Text>
+                  {ROLE_TAG[theme.role] ? <Tag color={ROLE_TAG[theme.role].color}>{ROLE_TAG[theme.role].text}</Tag> : <Tag>Chưa xuất bản</Tag>}
+                  {theme.processing ? <Tag color="orange">Đang xử lý</Tag> : null}
+                </Flex>
+              ),
+            }))}
+          />
+          {chosen?.role === "main" ? (
+            <Alert
+              type="warning"
+              showIcon
+              message="Đây là theme đang xuất bản"
+              description="Thay đổi hiện ngay trên cửa hàng thật. Nên nhân bản theme và cài vào bản nhân bản để xem trước."
+            />
+          ) : null}
+          <Flex gap={8} wrap="wrap">
+            <Button
+              type="primary"
+              disabled={!chosen || chosen.processing}
+              loading={planMutation.isPending}
+              onClick={() => planMutation.mutate(chosen.id)}
             >
-              <Flex align="center" gap={8} wrap="wrap">
-                <Text strong>{theme.name}</Text>
-                {ROLE_TAG[theme.role] ? <Tag color={ROLE_TAG[theme.role].color}>{ROLE_TAG[theme.role].text}</Tag> : <Tag>Chưa xuất bản</Tag>}
-                {theme.processing ? <Tag color="orange">Đang xử lý</Tag> : null}
-              </Flex>
-            </List.Item>
-          )}
-        />
+              Xem kế hoạch
+            </Button>
+            <Popconfirm
+              title="Gỡ F1GENZ Reviews khỏi theme này?"
+              description="Chỉ xoá các dòng include và snippet do hệ thống tạo."
+              okText="Gỡ"
+              cancelText="Huỷ"
+              disabled={!chosen || chosen.processing}
+              onConfirm={() => uninstallMutation.mutate(chosen.id)}
+            >
+              <Button danger disabled={!chosen || chosen.processing} loading={uninstallMutation.isPending}>
+                Gỡ
+              </Button>
+            </Popconfirm>
+          </Flex>
+        </Flex>
       )}
 
       {lastResult ? (
@@ -204,6 +243,13 @@ const ThemeInstallCard = () => {
           type="success"
           showIcon
           message={`Đã chèn ${lastResult.inserted.length} vị trí (${lastResult.verification.mode === "live" ? "đã kiểm tra trên cửa hàng" : "đã đọc lại để đối chiếu"})`}
+          action={
+            previewUrl ? (
+              <Button size="small" type="primary" href={previewUrl} target="_blank" rel="noopener noreferrer">
+                {appliedTheme.role === "main" ? "Mở cửa hàng" : "Xem trước"}
+              </Button>
+            ) : null
+          }
           description={
             <Flex vertical gap={4}>
               {lastResult.verification.checks.map((c) => (

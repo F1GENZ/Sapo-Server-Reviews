@@ -1191,10 +1191,87 @@ async function main() {
 
     await scenario("G4", "the Dev guide lists the store's themes for the one-click install", async ({ page, requests }) => {
       await go(page, withStore("/dev"));
-      await expectText(page, "Theme demo", "theme name in the install list");
       await expectVisible(page.getByRole("button", { name: "Xem kế hoạch" }), "plan button");
+      await page.locator(".ant-select").first().click();
+      await expectVisible(page.locator(".ant-select-item-option").filter({ hasText: "Theme demo" }), "theme name in the install list");
       assert(requests.some((r) => r.pathname === "/api/admin/theme-install/themes"), "the theme list was not requested");
     });
+
+    const THEMES_WITH_COPY = [
+      { id: "1001", name: "Theme demo", role: "main", processing: false },
+      { id: "2002", name: "Theme sao chép", role: "unpublished", processing: false },
+    ];
+    const installApi = (themes) => (pathname, method) => {
+      if (pathname === "/api/admin/theme-install/themes" && method === "GET") return { status: 200, body: { data: themes } };
+      if (pathname === "/api/admin/theme-install/plan" && method === "POST") {
+        return {
+          status: 200,
+          body: {
+            data: {
+              themeId: "2002",
+              themeName: "Theme sao chép",
+              role: "unpublished",
+              hash: "plan-hash-1",
+              warnings: [],
+              edits: [{ target: "loader", status: "insert", file: "layout/theme.bwt", reason: "trước </head>", source: "rule" }],
+            },
+          },
+        };
+      }
+      if (pathname === "/api/admin/theme-install/apply" && method === "POST") {
+        return {
+          status: 200,
+          body: {
+            data: {
+              inserted: [{ target: "loader", file: "layout/theme.bwt" }],
+              createdFiles: [],
+              verification: { mode: "read", checks: [{ name: "loader", ok: true, detail: "đã có" }] },
+              warnings: [],
+            },
+          },
+        };
+      }
+      return undefined;
+    };
+
+    await scenario(
+      "G5",
+      "the dashboard opens with the one-click card preselecting the unpublished theme; Apply posts that theme and offers a preview link",
+      { resolve: installApi(THEMES_WITH_COPY) },
+      async ({ page, requests }) => {
+        await go(page, withStore("/"));
+        await expectText(page, "Cài tự động vào theme", "install card on the first page");
+        await expectVisible(page.locator(".ant-select-selection-item").filter({ hasText: "Theme sao chép" }), "unpublished theme preselected");
+        assert.equal(await page.locator(".ant-select-selection-item").filter({ hasText: "Theme demo" }).count(), 0, "the live theme was preselected");
+        await page.getByRole("button", { name: "Xem kế hoạch" }).click();
+        assert(await waitUntil(() => requests.some((r) => r.pathname === "/api/admin/theme-install/plan")), "no plan request");
+        assert.equal(lastRequest(requests, "POST", (p) => p === "/api/admin/theme-install/plan").payload.themeId, "2002");
+        await page.getByRole("button", { name: "Cài vào theme này" }).click();
+        assert(await waitUntil(() => requests.some((r) => r.pathname === "/api/admin/theme-install/apply")), "no apply request");
+        assert.deepEqual(lastRequest(requests, "POST", (p) => p === "/api/admin/theme-install/apply").payload, { themeId: "2002", planHash: "plan-hash-1" });
+        const preview = page.getByRole("link", { name: "Xem trước" });
+        await expectVisible(preview, "preview link");
+        assert.equal(await preview.getAttribute("href"), `https://${STORE}/?previewThemeId=2002`);
+        assert.equal(await preview.getAttribute("rel"), "noopener noreferrer");
+      },
+    );
+
+    await scenario(
+      "G6",
+      "with only the live theme nothing is preselected and the plan button stays disabled until the merchant picks it",
+      { resolve: installApi([THEMES_WITH_COPY[0]]) },
+      async ({ page, requests }) => {
+        await go(page, withStore("/"));
+        await expectText(page, "Cửa hàng chưa có theme chưa xuất bản", "duplicate-the-theme guidance");
+        assert.equal(await page.locator(".ant-select-selection-item").count(), 0, "a theme was preselected");
+        assert(await page.getByRole("button", { name: "Xem kế hoạch" }).isDisabled(), "plan button enabled with no theme chosen");
+        await page.locator(".ant-select").first().click();
+        await page.locator(".ant-select-item-option").filter({ hasText: "Theme demo" }).click();
+        await expectText(page, "Đây là theme đang xuất bản", "live warning");
+        assert(await page.getByRole("button", { name: "Xem kế hoạch" }).isEnabled(), "plan button still disabled after choosing");
+        assert.equal(requests.some((r) => r.pathname === "/api/admin/theme-install/plan"), false, "a plan was requested without a click");
+      },
+    );
 
     console.log("\n--- labels and click targets ---");
     await scenario("C1", "every link on the contact page is a click target of at least 24 px", async ({ page }) => {

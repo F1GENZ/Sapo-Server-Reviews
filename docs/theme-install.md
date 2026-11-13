@@ -1,8 +1,12 @@
 # One-click theme install
 
-Admin page: `Hướng dẫn kỹ thuật` -> card `Cài tự động vào theme`. Worker code: `worker/src/core/theme-install/`.
+Admin page: the first page after install (`Tổng quan`) and `Hướng dẫn kỹ thuật` both show the card `Cài tự động vào theme`. Worker code: `worker/src/core/theme-install/`.
 
-The merchant picks a theme from `GET /admin/themes.json`. The app reads the theme files, finds where the loader, the review widget and the card badge belong, shows each change as a diff, and writes only after the merchant confirms.
+The merchant picks a theme from `GET /admin/themes.json`. The card preselects the first theme whose role is not `main` (unpublished), so the first apply lands on a copy the merchant can preview. With no unpublished theme nothing is preselected: the card says to duplicate the live theme in Sapo, and choosing the live theme shows a warning and keeps the plan modal's live acknowledgement. After Apply, `Xem trước` opens `https://{store}/?previewThemeId=<id>` (the live theme gets `Mở cửa hàng`, the storefront root). The app reads the theme files, finds where the loader, the review widget and the card badge belong, shows each change as a diff, and writes only after the merchant confirms.
+
+## Staying in the Sapo admin after install
+
+A completed install callback (`flow: install`, including the scope re-authorization from the card) answers `302 https://{store}/admin/apps/f1genz-reviews-danh-gia-san-pham` instead of the admin SPA origin. The handle is `SAPO_APP_ADMIN_HANDLE` in `worker/src/core/sapo/admin-app-url.ts`; the URL is only built for `*.mysapo.net` stores and any other store value falls back to the previous redirect to `FRONTEND_URL` with a handoff code. Sapo then opens the Application URL in the admin iframe with a signed launch query, which the SPA exchanges for a session as for every launch. Login-flow callbacks are unchanged.
 
 ## Requirements
 

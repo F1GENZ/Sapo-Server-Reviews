@@ -52,8 +52,12 @@ Rate limits use `AUTH_RATE_LIMIT_WINDOW_SECONDS` and `AUTH_RATE_LIMIT_MAX` (sess
 
 6. In the background: register webhooks, write the storefront config metafield.
 
-7. Server creates a one-time handoff code; the browser lands on
-   FRONTEND_URL with ?storeDomain=...&handoff_code=...
+7. A completed install redirects the browser to the app inside the Sapo admin,
+   https://{store}/admin/apps/{handle} (store must be *.mysapo.net). Sapo loads
+   the Application URL in the iframe with a signed launch query and the SPA gets
+   its session through verify-hmac. If the store is not a *.mysapo.net host the
+   server falls back to the old redirect: FRONTEND_URL with
+   ?storeDomain=...&handoff_code=... (the login flow always uses this redirect).
 ```
 
 Only `*.mysapo.net` hosts are accepted when building authorize URLs. A callback whose state was created before the store's `uninstalledAt` is rejected as stale.

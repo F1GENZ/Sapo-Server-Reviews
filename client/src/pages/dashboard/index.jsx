@@ -25,6 +25,7 @@ import {
   theme,
 } from "antd";
 import Link from "../../components/StoreLink";
+import ThemeInstallCard from "../dev/ThemeInstallCard";
 import {
   ArrowRightOutlined,
   BarChartOutlined,
@@ -522,6 +523,8 @@ const DashboardPage = () => {
           />
         ) : null}
 
+        <ThemeInstallCard />
+
         {isLoading ? (
           <div style={{ textAlign: "center", padding: "88px 0" }}>
             <Spin size="large" />
@@ -541,7 +544,7 @@ const DashboardPage = () => {
                   <div>
                     <Text strong>Gắn widget vào theme</Text>
                     <div>
-                      <Text type="secondary">Thêm snippet vào trang sản phẩm theo hướng dẫn kỹ thuật.</Text>
+                      <Text type="secondary">Dùng thẻ Cài tự động ở trên, hoặc dán snippet theo hướng dẫn kỹ thuật.</Text>
                     </div>
                     <Link to={buildRoute("/dev")}>Mở hướng dẫn kỹ thuật →</Link>
                   </div>
