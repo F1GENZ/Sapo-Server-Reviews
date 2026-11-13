@@ -1,0 +1,37 @@
+<!doctype html>
+<html class="no-js" lang="{{ shop.locale | default: 'vi' | escape }}">
+  <head>
+    <script>document.documentElement.className = document.documentElement.className.replace('no-js', 'js');</script>
+    {%- include 'head-meta-tags' -%}
+    {%- include 'head-fonts' -%}
+    {%- include 'head-stylesheets' -%}
+    {%- include 'head-design-systems' -%}
+    {%- include 'head-script' -%}  
+    {%- include 'head-defer' -%}
+    {{ content_for_header }}
+</head>
+  <body class="nau-theme template-{{ template | handle }}">
+    {%- include 'skip-to-content-link', href: '#MainContent', text: 'Chuyển đến nội dung chính' -%}
+    {%- include 'icons-sprite' -%}
+    {%- include 'announcement-bar' -%}
+    {%- include 'header' -%}
+    {%- include 'mobile-menu' -%}
+    <main id="MainContent">{{ content_for_layout }}</main>
+    {%- include 'footer' -%}
+    {%- if settings.newsletter_modal_enable -%}
+      {%- include 'newsletter-modal' -%}
+    {%- endif -%}
+    {%- include 'cart-modal' -%}
+    {%- include 'search-modal' -%}
+    {%- include 'quickview-modal' -%}
+    {%- include 'confirm-modal' -%}
+    {%- include 'float-social' -%}
+    <div class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div class="overlay"></div>
+    <button type="button" class="back-to-top" id="backToTop" aria-label="Về đầu trang"><svg class="icon" width="18" height="18"><use href="#icon-chevron-right" /></svg></button>
+    <wishlist-manager></wishlist-manager>
+    {%- if settings.compare_enable -%}
+      <compare-manager></compare-manager>
+    {%- endif -%}
+  </body>
+</html>

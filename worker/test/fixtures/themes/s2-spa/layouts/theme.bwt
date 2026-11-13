@@ -1,0 +1,42 @@
+<!doctype html>
+<html class="no-js" lang="vi">
+  <head>
+    <script>document.documentElement.className = document.documentElement.className.replace('no-js', 'js');</script>
+    {%- include 'head-meta-tags' -%}
+    {%- include 'head-fonts' -%}
+    {%- include 'head-design-systems' -%}
+    {%- include 'head-stylesheets' -%}
+    {%- if settings.spa_mobile_dock_enable -%}<link rel="stylesheet" href="{{ 'mobile-dock.css' | asset_url | escape }}">{%- endif -%}
+    {%- include 'head-script' -%}
+    {{ content_for_header }}
+  
+</head>
+  <body class="bed-theme template-{{ template | handle }}">
+    {%- include 'skip-to-content-link', href: '#MainContent', text: 'Chuyển đến nội dung chính' -%}
+    {%- include 'icons-sprite' -%}
+    {%- include 'header' -%}
+    {%- include 'mobile-menu' -%}
+    <main id="MainContent" tabindex="-1">{{ content_for_layout }}</main>
+    {%- include 'footer' -%}
+    {%- if settings.bed_newsletter_modal_enable -%}{%- include 'newsletter-modal' -%}{%- endif -%}
+    {%- include 'cart-modal' -%}
+    {%- include 'search-modal' -%}
+    {%- include 'quickview-modal' -%}
+    {%- include 'confirm-modal' -%}
+    {%- include 'booking-modal' -%}
+    {%- include 'sale-popup' -%}
+    {%- include 'account-modal' -%}
+    {%- if template contains 'product' -%}{%- include 'notify-modal' -%}{%- endif -%}
+    {%- include 'swal-modal' -%}
+    {%- include 'float-social' -%}
+    <div class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
+    <button type="button" class="back-to-top" id="backToTop" aria-label="Về đầu trang">
+      {%- include 'icon', name: 'chevron-up', size: 18 -%}
+    </button>
+    {%- if settings.wishlist_enable -%}<wishlist-manager></wishlist-manager>{%- endif -%}
+    {%- if settings.compare_enable -%}<compare-manager></compare-manager>{%- endif -%}
+    {%- include 'mobile-dock' -%}
+    {%- if settings.spa_mobile_dock_enable -%}<script defer src="{{ 'mobile-dock.js' | asset_url | escape }}"></script>{%- endif -%}
+    <script defer src="{{ 'spa-modals.js' | asset_url | escape }}"></script>
+  </body>
+</html>

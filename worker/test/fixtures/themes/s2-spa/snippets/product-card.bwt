@@ -1,0 +1,142 @@
+{%- if product and product != empty -%}
+  {%- assign current_variant = product.selected_or_first_available_variant -%}
+  {%- assign price = current_variant.price -%}
+  {%- assign compare = current_variant.compare_at_price -%}
+  {%- assign discount_percentage = 0 -%}
+  {%- if compare > price -%}
+    {%- assign discount_percentage = compare | minus: price | times: 100 | divided_by: compare | round -%}
+  {%- endif -%}
+  {%- assign image_alt = product.featured_image.alt | default: product.name -%}
+  {%- assign secondary_image = nil -%}
+  {%- assign hover_image_enable = settings.spa_product_card_hover_image_enable -%}
+  {%- if hover_image_enable and product.images.size > 1 -%}
+    {%- for img in product.images offset: 1 limit: 1 -%}
+      {%- assign secondary_image = img -%}
+    {%- endfor -%}
+  {%- endif -%}
+  {%- assign color_option_index = 0 -%}
+  {%- for option in product.options -%}
+    {%- assign opt_down = option | downcase -%}
+    {%- if opt_down contains 'màu' or opt_down contains 'color' -%}
+      {%- assign color_option_index = forloop.index -%}
+      {%- break -%}
+    {%- endif -%}
+  {%- endfor -%}
+<product-card class="product-card spa-treatment-card{% if secondary_image %} spa-treatment-card--has-hover-image{% endif %}" data-product-handle="{{ product.alias | escape }}"{% if product.tags.size > 0 %} data-tags="{{ product.tags | join: ',' | downcase | escape }}"{% endif %}>
+  <article class="spa-treatment-card__inner">
+    <div class="spa-treatment-card__media-wrap">
+      <a class="spa-treatment-card__media" href="{{ product.url | escape }}" aria-label="Xem {{ product.name | escape }}">
+        <span class="spa-treatment-card__image-frame">
+          {%- if product.featured_image -%}
+            <img src="{{ product.featured_image.src | img_url: 'grande' | escape }}" alt="{{ image_alt | escape }}" width="600" height="600" loading="{{ lazyload | default: 'lazy' | escape }}" decoding="async" class="spa-treatment-card__image" data-main-image>
+          {%- elsif product.images.first -%}
+            <img src="{{ product.images.first.src | img_url: 'grande' | escape }}" alt="{{ image_alt | escape }}" width="600" height="600" loading="{{ lazyload | default: 'lazy' | escape }}" decoding="async" class="spa-treatment-card__image" data-main-image>
+
+          {%- endif -%}
+          {%- if secondary_image -%}
+            <img src="{{ secondary_image.src | default: secondary_image | img_url: 'grande' | escape }}" alt="{{ secondary_image.alt | default: product.name | escape }}" width="600" height="600" loading="lazy" decoding="async" class="spa-treatment-card__image spa-treatment-card__image--hover">
+          {%- endif -%}
+        </span>
+
+        <div class="spa-treatment-card__badges">
+          {%- if product.available == false -%}
+            <span class="spa-treatment-card__badge spa-treatment-card__badge--soldout" setting-id="spa_product_card_soldout_text" setting-type="text">{{ settings.spa_product_card_soldout_text | escape }}</span>
+          {%- elsif discount_percentage > 0 -%}
+            <span class="spa-treatment-card__badge spa-treatment-card__badge--sale">-{{ discount_percentage }}%</span>
+          {%- endif -%}
+          {%- if product.tags.size > 0 -%}
+            <span class="spa-treatment-card__tag">{{ product.tags.first | upcase }}</span>
+          {%- elsif settings.spa_product_card_tag_default != blank -%}
+            <span class="spa-treatment-card__tag" setting-id="spa_product_card_tag_default" setting-type="text">{{ settings.spa_product_card_tag_default | escape }}</span>
+          {%- endif -%}
+        </div>
+      </a>
+
+      <div class="spa-treatment-card__tools">
+        {%- if product.available -%}
+          {%- assign quick_add_enable = settings.spa_product_card_quick_add_enable -%}
+          {%- if quick_add_enable -%}
+            <button type="button" class="spa-treatment-card__tool spa-treatment-card__tool--quickadd" data-action="quick-add" data-variant-id="{{ current_variant.id | escape }}" aria-label="Thêm vào giỏ {{ product.name | escape }}" title="Thêm vào giỏ">
+              {%- include 'icon', name: 'cart', size: 18 -%}
+              <span class="spa-treatment-card__spinner" aria-hidden="true"></span>
+            </button>
+          {%- endif -%}
+        {%- endif -%}
+        <button type="button" class="spa-treatment-card__tool" data-action="open-quickview" data-product-handle="{{ product.alias | escape }}" aria-label="Xem nhanh {{ product.name | escape }}" title="Xem nhanh">
+          {%- include 'icon', name: 'eye-show', size: 18 -%}
+        </button>
+        {%- if settings.wishlist_enable and settings.wishlist_show_on_card -%}
+          <button type="button" class="spa-treatment-card__tool" data-action="add-wishlist" data-product-id="{{ product.id | escape }}" data-product-handle="{{ product.alias | escape }}" aria-label="Lưu {{ product.name | escape }}" title="Yêu thích">
+            {%- include 'icon', name: 'heart', size: 18 -%}
+          </button>
+        {%- endif -%}
+        {%- if settings.compare_enable -%}
+          <button type="button" class="spa-treatment-card__tool spa-treatment-card__tool--compare" data-action="add-compare" data-product-id="{{ product.id | escape }}" data-product-handle="{{ product.alias | escape }}" aria-label="So sánh {{ product.name | escape }}" title="So sánh">
+            {%- include 'icon', name: 'compare', size: 18 -%}
+          </button>
+        {%- endif -%}
+      </div>
+    </div>
+
+    <div class="spa-treatment-card__content">
+      <h3 class="spa-treatment-card__title">
+        <a href="{{ product.url | escape }}">{{ product.name | escape }}</a>
+      </h3>
+      {%- if settings.spa_product_card_subtitle != blank -%}<span class="spa-treatment-card__time" setting-id="spa_product_card_subtitle" setting-type="text">{{ settings.spa_product_card_subtitle | escape }}</span>{%- endif -%}
+      {%- assign card_desc = product.summary | default: product.content | strip_html | truncate: 95 -%}
+      {%- if card_desc != blank -%}<p class="spa-treatment-card__desc">{{ card_desc }}</p>{%- endif -%}
+
+      {%- assign swatches_enable = settings.spa_product_card_swatches_enable -%}
+      {%- if swatches_enable and color_option_index > 0 and product.variants.size > 1 -%}
+        {%- assign option_pos = 'option' | append: color_option_index -%}
+        {%- assign rendered_colors = '' -%}
+        {%- assign swatch_count = 0 -%}
+        <div class="spa-treatment-card__swatches" role="group" aria-label="Tùy chọn màu sắc">
+          {%- for variant in product.variants -%}
+            {%- if swatch_count >= 4 -%}{%- break -%}{%- endif -%}
+            {%- assign color_val = variant[option_pos] -%}
+            {%- if color_val != blank -%}
+              {%- assign needle = '|' | append: color_val | append: '|' -%}
+              {%- unless rendered_colors contains needle -%}
+                {%- assign rendered_colors = rendered_colors | append: needle -%}
+                {%- assign swatch_count = swatch_count | plus: 1 -%}
+                {%- assign variant_img = variant.image | default: variant.featured_image -%}
+                {%- assign variant_img_url = '' -%}
+                {%- if variant_img -%}
+                  {%- assign variant_img_url = variant_img.src | default: variant_img | img_url: 'grande' -%}
+                {%- endif -%}
+                <button type="button"
+                  class="spa-treatment-card__swatch{% if variant_img == blank %} spa-treatment-card__swatch--text{% endif %}{% if forloop.first %} is-active{% endif %}"
+                  data-variant-image="{{ variant_img_url | escape }}"
+                  data-variant-id="{{ variant.id | escape }}"
+                  data-color-name="{{ color_val | escape }}"
+                  aria-label="{{ color_val | escape }}"
+                  title="{{ color_val | escape }}">
+                  {%- if variant_img -%}
+                    <img src="{{ variant_img.src | default: variant_img | img_url: 'small' | escape }}" alt="{{ color_val | escape }}" width="20" height="20" loading="lazy" decoding="async">
+                  {%- else -%}
+                    <span class="spa-treatment-card__swatch-label">{{ color_val | escape }}</span>
+                  {%- endif -%}
+                </button>
+              {%- endunless -%}
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+      {%- endif -%}
+
+      <div class="spa-treatment-card__footer">
+        <div class="spa-treatment-card__price">
+          {%- if price == 0 -%}
+            <span class="spa-price-contact" setting-id="spa_product_card_contact_text" setting-type="text">{{ settings.spa_product_card_contact_text | escape }}</span>
+          {%- else -%}
+            {%- if product.price_varies -%}<span class="spa-price-main">Từ {{ product.price_min | money }}</span>{%- else -%}<span class="spa-price-main">{{ price | money }}</span>{%- endif -%}
+            {%- if compare > price -%}<del class="spa-price-compare">{{ compare | money }}</del>{%- endif -%}
+          {%- endif -%}
+        </div>
+        {%- assign card_detail_text = settings.spa_product_card_detail_text -%}
+        <a class="spa-btn spa-btn--outline-sm" href="{{ product.url | escape }}" setting-id="spa_product_card_detail_text" setting-type="text">{{ card_detail_text | escape }}</a>
+      </div>
+    </div>
+  </article>
+</product-card>
+{%- endif -%}

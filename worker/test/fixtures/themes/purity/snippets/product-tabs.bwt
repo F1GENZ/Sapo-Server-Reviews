@@ -1,0 +1,49 @@
+{%- comment -%}Tab ngang PDP (hook #pdp-tabs). Nội dung Thành phần / Phù hợp với / Cách dùng tách theo thứ tự thẻ h3 của mô tả sản phẩm (product.content); tiêu đề tab lấy từ settings. Tab Giao hàng & đổi trả dùng chữ của settings và liên kết tới trang chính sách. Mô tả không tách được thì cả mô tả nằm ở tab đầu.{%- endcomment -%}
+{%- assign pur_tb_parts = product.content | split: '<h3>' -%}
+{%- assign pur_tb_list = '' -%}
+{%- assign pur_tb_panels = '' -%}
+{%- assign pur_tb_n = 0 -%}
+{%- for pur_tb_i in (1..5) -%}
+  {%- assign pur_tb_title = '' -%}{%- assign pur_tb_key = '' -%}{%- assign pur_tb_html = '' -%}{%- assign pur_tb_on = true -%}
+  {%- case pur_tb_i -%}
+    {%- when 1 -%}
+      {%- assign pur_tb_title = settings.main_product_tab1_title -%}{%- assign pur_tb_key = 'main_product_tab1_title' -%}
+      {%- if settings.main_product_tab1_check == false -%}{%- assign pur_tb_on = false -%}{%- endif -%}
+      {%- if pur_tb_parts != blank and pur_tb_parts.size > 3 -%}{%- assign pur_tb_html = pur_tb_parts[1] | split: '</h3>' | last -%}{%- else -%}{%- assign pur_tb_html = product.content -%}{%- endif -%}
+    {%- when 2 -%}
+      {%- assign pur_tb_title = settings.main_product_tab2_title -%}{%- assign pur_tb_key = 'main_product_tab2_title' -%}
+      {%- if settings.main_product_tab2_check == false -%}{%- assign pur_tb_on = false -%}{%- endif -%}
+      {%- if pur_tb_parts != blank and pur_tb_parts.size > 3 -%}{%- assign pur_tb_html = pur_tb_parts[3] | split: '</h3>' | last -%}{%- endif -%}
+    {%- when 3 -%}
+      {%- assign pur_tb_title = settings.pur_pdp_skin_label -%}{%- assign pur_tb_key = 'pur_pdp_skin_label' -%}
+      {%- if pur_tb_parts != blank and pur_tb_parts.size > 3 -%}{%- assign pur_tb_html = pur_tb_parts[2] | split: '</h3>' | last -%}{%- endif -%}
+    {%- when 4 -%}
+      {%- assign pur_tb_title = settings.main_product_tab3_title -%}{%- assign pur_tb_key = 'main_product_tab3_title' -%}
+      {%- if settings.main_product_tab3_check == false -%}{%- assign pur_tb_on = false -%}{%- endif -%}
+      {%- capture pur_tb_html -%}
+        {%- if settings.pur_pdp_shipping_text != blank -%}<p setting-id="pur_pdp_shipping_text" setting-type="textarea">{{ settings.pur_pdp_shipping_text | escape }}</p>{%- endif -%}
+        {%- if settings.main_product_tab3_handle != blank and pages[settings.main_product_tab3_handle].url != blank and settings.pur_pdp_return_link_text != blank -%}
+        <p><a class="pur-pdp__text-link" href="{{ pages[settings.main_product_tab3_handle].url }}" title="{{ settings.pur_pdp_return_link_text | escape }}" setting-id="pur_pdp_return_link_text" setting-type="text">{{ settings.pur_pdp_return_link_text | escape }}</a></p>
+        {%- endif -%}
+      {%- endcapture -%}
+    {%- when 5 -%}
+      {%- if store.metafields.f1genz.config != blank and settings.pur_reviews_tab_enable != false -%}
+        {%- assign pur_tb_title = settings.pur_reviews_tab_title -%}{%- assign pur_tb_key = 'pur_reviews_tab_title' -%}
+        {%- capture pur_tb_html -%}<div class="pur-pdp__reviews" data-pur-reviews><f1genz-reviews product-id="{{ product.id }}" orgid="{{ store.metafields.f1genz.config.value.orgid }}" customer-email="{{ customer.email | escape }}" customer-phone="{{ customer.phone | default: customer.default_address.phone | escape }}"></f1genz-reviews></div>{%- endcapture -%}
+      {%- endif -%}
+  {%- endcase -%}
+  {%- assign pur_tb_probe = pur_tb_html | strip -%}
+  {%- if pur_tb_on and pur_tb_probe != blank -%}{%- if pur_tb_title != blank -%}
+    {%- assign pur_tb_n = pur_tb_n | plus: 1 -%}
+    {%- capture pur_tb_btn -%}<button class="pur-pdp__tab{% if pur_tb_n == 1 %} is-active{% endif %}" type="button" role="tab" id="pur-pdp-tab-{{ pur_tb_n }}" aria-controls="pur-pdp-panel-{{ pur_tb_n }}" aria-selected="{% if pur_tb_n == 1 %}true{% else %}false{% endif %}"{% unless pur_tb_n == 1 %} tabindex="-1"{% endunless %} data-pur-tab="{{ pur_tb_n }}" setting-id="{{ pur_tb_key }}" setting-type="text">{{ pur_tb_title | escape }}</button>{%- endcapture -%}
+    {%- capture pur_tb_panel -%}<div class="pur-pdp__panel" role="tabpanel" id="pur-pdp-panel-{{ pur_tb_n }}" aria-labelledby="pur-pdp-tab-{{ pur_tb_n }}" tabindex="0" data-pur-panel="{{ pur_tb_n }}"{% unless pur_tb_n == 1 %} hidden{% endunless %}>{{ pur_tb_html }}</div>{%- endcapture -%}
+    {%- assign pur_tb_list = pur_tb_list | append: pur_tb_btn -%}
+    {%- assign pur_tb_panels = pur_tb_panels | append: pur_tb_panel -%}
+  {%- endif -%}{%- endif -%}
+{%- endfor -%}
+{%- if pur_tb_n > 0 -%}
+<section class="pur-pdp__tabs" id="pdp-tabs" data-pur-tabs data-hook="pdp-tabs">
+  <div class="pur-pdp__tablist" role="tablist">{{ pur_tb_list }}</div>
+  <div class="pur-pdp__panels">{{ pur_tb_panels }}</div>
+</section>
+{%- endif -%}

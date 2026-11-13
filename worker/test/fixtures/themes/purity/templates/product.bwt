@@ -1,0 +1,191 @@
+{%- assign pur_pdp_variant = product.first_available_variant -%}
+{%- if pur_pdp_variant == blank -%}{%- assign pur_pdp_variant = product.variants.first -%}{%- endif -%}
+{%- assign pur_pdp_price = pur_pdp_variant.price -%}
+{%- assign pur_pdp_compare = pur_pdp_variant.compare_at_price -%}
+{%- assign pur_pdp_sale = false -%}
+{%- assign pur_pdp_discount = 0 -%}
+{%- if pur_pdp_compare > pur_pdp_price and pur_pdp_price > 0 -%}
+  {%- assign pur_pdp_sale = true -%}
+  {%- assign pur_pdp_discount = pur_pdp_compare | minus: pur_pdp_price | times: 100 | divided_by: pur_pdp_compare | round -%}
+  {%- if pur_pdp_discount < 1 -%}{%- assign pur_pdp_discount = 1 -%}{%- elsif pur_pdp_discount > 99 -%}{%- assign pur_pdp_discount = 99 -%}{%- endif -%}
+{%- endif -%}
+{%- assign pur_pdp_buyable = false -%}
+{%- if product.available and pur_pdp_price != 0 -%}{%- assign pur_pdp_buyable = true -%}{%- endif -%}
+{%- assign pur_pdp_step_set = '|' -%}{%- assign pur_pdp_step_list = '' -%}{%- assign pur_pdp_step_first = 0 -%}{%- assign pur_pdp_step_last = 0 -%}{%- assign pur_pdp_step_n = 0 -%}
+{%- for pur_pdp_i in (1..5) -%}
+  {%- assign pur_pdp_tag = 'buoc:' | append: pur_pdp_i -%}
+  {%- if product.tags contains pur_pdp_tag -%}
+    {%- assign pur_pdp_step_set = pur_pdp_step_set | append: pur_pdp_i | append: '|' -%}
+    {%- if pur_pdp_step_n > 0 -%}{%- assign pur_pdp_step_list = pur_pdp_step_list | append: ', ' -%}{%- endif -%}
+    {%- assign pur_pdp_step_list = pur_pdp_step_list | append: pur_pdp_i -%}
+    {%- if pur_pdp_step_first == 0 -%}{%- assign pur_pdp_step_first = pur_pdp_i -%}{%- endif -%}
+    {%- assign pur_pdp_step_last = pur_pdp_i -%}
+    {%- assign pur_pdp_step_n = pur_pdp_step_n | plus: 1 -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- assign pur_pdp_vol_text = '' -%}{%- assign pur_pdp_vol_ml = 0 -%}
+{%- for pur_pdp_vol_t in product.tags -%}
+  {%- if pur_pdp_vol_t contains 'dung-tich:' and pur_pdp_vol_text == blank -%}
+    {%- assign pur_pdp_vol_raw = pur_pdp_vol_t | remove: 'dung-tich:' -%}
+    {%- assign pur_pdp_vol_text = pur_pdp_vol_raw | replace: '-', ',' -%}
+    {%- if pur_pdp_vol_raw contains 'ml' -%}
+      {%- assign pur_pdp_vol_num = pur_pdp_vol_raw | remove: 'ml' | replace: '-', '.' | times: 1.0 -%}
+      {%- if pur_pdp_vol_num > 0 -%}{%- assign pur_pdp_vol_ml = pur_pdp_vol_num -%}{%- endif -%}
+    {%- endif -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- if pur_pdp_vol_text == blank and product.variants.size == 1 and pur_pdp_variant.title != blank and pur_pdp_variant.title != 'Default Title' -%}{%- assign pur_pdp_vol_text = pur_pdp_variant.title -%}{%- endif -%}
+{%- assign pur_pdp_qty = pur_pdp_variant.inventory_quantity -%}
+{%- assign pur_pdp_low_max = settings.pur_pdp_low_stock_max | plus: 0 -%}
+{%- assign pur_pdp_phone_href = settings.footers2_one_info3 | replace: ' ', '' | replace: '.', '' | replace: '-', '' -%}
+<div class="pur-pdp" data-pur-pdp data-pur-lbl-add="{{ settings.pur_coll_them_vao_gio | escape }}" data-pur-lbl-soldout="{{ settings.pur_pdp_soldout_text | escape }}" data-pur-lbl-save="{{ settings.pur_pdp_save_text | escape }}" data-pur-lbl-price-contact="{{ settings.shop_product_card_price_zero_text | escape }}" data-pur-lbl-contact="{{ settings.pur_quickview_contact_label | escape }}" data-pur-contact-href="{% if pur_pdp_phone_href != blank %}tel:{{ pur_pdp_phone_href | escape }}{% endif %}" data-pur-lbl-low="{{ settings.pur_pdp_low_stock_text | escape }}" data-pur-low-max="{{ pur_pdp_low_max }}" data-pur-lbl-ml="{{ settings.pur_pdp_price_per_ml_label | escape }}" data-pur-lbl-copied="{{ settings.pur_pdp_share_copied | escape }}">
+  <div class="container">
+    <div class="pur-pdp__crumbs">
+      {%- include 'shop-breadcrumb' -%}
+    </div>
+    <div class="pur-pdp__layout">
+      <section class="pur-pdp__gallery"{% if settings.pur_pdp_gallery_label != blank %} aria-label="{{ settings.pur_pdp_gallery_label | escape }}"{% endif %}>
+        {%- include 'product-gallery' -%}
+      </section>
+      <section class="pur-pdp__info">
+        <div class="pur-pdp__eyebrow">
+          {%- if product.vendor != blank -%}<p class="pur-pdp__vendor">{{ product.vendor | escape }}</p>{%- endif -%}
+          {%- assign pur_ps_set = pur_pdp_step_set -%}{%- assign pur_ps_list = pur_pdp_step_list -%}{%- assign pur_ps_first = pur_pdp_step_first -%}{%- assign pur_ps_count = pur_pdp_step_n -%}{%- assign pur_ps_class = '' -%}
+          {%- include 'product-step' -%}
+        </div>
+        <h1 class="pur-pdp__title">{{ product.name | escape }}</h1>
+        {%- assign pur_rv_sum = product.metafields.reviews.public_summary -%}
+        {%- assign pur_rv_count = pur_rv_sum.value.count | default: 0 | plus: 0 -%}
+        {%- if store.metafields.f1genz.config != blank and settings.pur_rating_badge_pdp_enable != false and pur_rv_count > 0 -%}
+        <div class="pur-pdp__rating" data-pur-rating>
+          <f1genz-rating-badge orgid="{{ store.metafields.f1genz.config.value.orgid }}" product-id="{{ product.id }}" avg-rating="{{ product.metafields.reviews.public_summary.value.avg | default: 0 | plus: 0.0 }}" review-count="{{ pur_rv_count }}"></f1genz-rating-badge>
+        </div>
+        {%- endif -%}
+        <div class="pur-pdp__price">
+          {%- if pur_pdp_price == 0 -%}
+            <span class="pur-pdp__price-now is-contact" data-pur-price>{% if settings.shop_product_card_price_zero_text != blank %}<strong setting-id="shop_product_card_price_zero_text" setting-type="text">{{ settings.shop_product_card_price_zero_text | escape }}</strong>{% endif %}</span>
+          {%- else -%}
+            <span class="pur-pdp__price-now{% if pur_pdp_sale %} is-sale{% endif %}" data-pur-price>{{ pur_pdp_price | money | replace: ',', '.' }}</span>
+          {%- endif -%}
+          <del class="pur-pdp__price-was" data-pur-compare{% unless pur_pdp_sale %} hidden{% endunless %}>{% if pur_pdp_sale %}{{ pur_pdp_compare | money | replace: ',', '.' }}{% endif %}</del>
+          <span class="pur-pdp__price-save" data-pur-save{% unless pur_pdp_sale %} hidden{% endunless %}>{% if pur_pdp_sale %}{% if settings.pur_pdp_save_text != blank %}<span setting-id="pur_pdp_save_text" setting-type="text">{{ settings.pur_pdp_save_text | escape }}</span> {% endif %}{{ pur_pdp_discount }}%{% endif %}</span>
+        </div>
+        {%- if settings.pur_pdp_price_per_ml_label != blank -%}
+        <p class="pur-pdp__ml" data-pur-ml{% unless pur_pdp_vol_ml > 0 and pur_pdp_price > 0 %} hidden{% endunless %}><span setting-id="pur_pdp_price_per_ml_label" setting-type="text">{{ settings.pur_pdp_price_per_ml_label | escape }}</span>: <span data-pur-ml-value>{%- if pur_pdp_vol_ml > 0 and pur_pdp_price > 0 -%}{{ pur_pdp_price | times: 1.0 | divided_by: pur_pdp_vol_ml | round | money | replace: ',', '.' }}{%- endif -%}</span></p>
+        {%- endif -%}
+        {%- capture pur_pdp_chips -%}
+          {%- assign pur_pdp_skin_pairs = settings.pur_pdp_skin_map | split: ';' -%}
+          {%- for pur_pdp_t in product.tags -%}
+            {%- if pur_pdp_t contains 'loai-da:' -%}
+              {%- assign pur_pdp_skin_slug = pur_pdp_t | remove: 'loai-da:' -%}
+              {%- for pur_pdp_pair in pur_pdp_skin_pairs -%}
+                {%- assign pur_pdp_kv = pur_pdp_pair | split: '=' -%}
+                {%- assign pur_pdp_k = pur_pdp_kv[0] | strip -%}
+                {%- if pur_pdp_k == pur_pdp_skin_slug and pur_pdp_kv[1] != blank -%}<li><a class="pur-pdp__chip" href="/collections/all/{{ pur_pdp_t | escape }}" title="{{ pur_pdp_kv[1] | strip | escape }}">{{ pur_pdp_kv[1] | strip | escape }}</a></li>{%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endcapture -%}
+        {%- assign pur_pdp_chips_probe = pur_pdp_chips | strip -%}
+        {%- if pur_pdp_chips_probe != blank -%}
+        <div class="pur-pdp__skin">
+          {%- if settings.pur_pdp_skin_label != blank -%}<p class="pur-pdp__label" id="pur-pdp-skin-label" setting-id="pur_pdp_skin_label" setting-type="text">{{ settings.pur_pdp_skin_label | escape }}</p>{%- endif -%}
+          <ul class="pur-pdp__chips"{% if settings.pur_pdp_skin_label != blank %} aria-labelledby="pur-pdp-skin-label"{% endif %}>{{ pur_pdp_chips }}</ul>
+        </div>
+        {%- endif -%}
+        <div class="pur-pdp__selects" hidden>
+          <select id="main-product-select" name="id">
+            {%- for pur_pdp_item in product.variants -%}
+              <option value="{{ pur_pdp_item.id }}"{% if pur_pdp_item.id == pur_pdp_variant.id %} selected{% endif %}{% unless pur_pdp_item.available %} disabled{% endunless %}>{{ pur_pdp_item.title | escape }}</option>
+            {%- endfor -%}
+          </select>
+        </div>
+        {%- if product.variants.size > 1 -%}
+        <div class="pur-pdp__options">
+          {%- include 'product-options' -%}
+        </div>
+        {%- elsif pur_pdp_vol_text != blank -%}
+        <div class="pur-pdp__options pur-pdp__options--single">
+          {%- if settings.pur_pdp_volume_label != blank -%}<p class="pur-pdp__label" setting-id="pur_pdp_volume_label" setting-type="text">{{ settings.pur_pdp_volume_label | escape }}</p>{%- endif -%}
+          <p class="pur-pdp__pill">{{ pur_pdp_vol_text | escape }}</p>
+        </div>
+        {%- endif -%}
+        {%- assign pur_pdp_low = false -%}{%- if pur_pdp_qty != blank -%}{%- if pur_pdp_qty > 0 and pur_pdp_qty <= pur_pdp_low_max -%}{%- assign pur_pdp_low = true -%}{%- endif -%}{%- endif -%}
+        <p class="pur-pdp__stock" data-pur-stock{% unless pur_pdp_low %} hidden{% endunless %}>{%- if pur_pdp_low and settings.pur_pdp_low_stock_text != blank -%}{%- assign pur_pdp_qty_s = pur_pdp_qty | append: '' -%}{{ settings.pur_pdp_low_stock_text | replace: '%n', pur_pdp_qty_s | escape }}{%- endif -%}</p>
+        {%- if pur_pdp_price != 0 -%}
+        <div class="pur-pdp__buy" data-f1genz-atc-block>
+          <div class="pur-pdp__qty" data-pur-qty{% unless pur_pdp_buyable %} hidden{% endunless %}>
+            {%- if settings.pur_pdp_qty_label != blank -%}<label class="pur-pdp__label" for="pur-pdp-quantity" setting-id="pur_pdp_qty_label" setting-type="text">{{ settings.pur_pdp_qty_label | escape }}</label>{%- endif -%}
+            <div class="shop-quantity pur-pdp__stepper">
+              <button type="button" data-type="shop-quantity-minus"{% if settings.pur_pdp_qty_minus != blank %} aria-label="{{ settings.pur_pdp_qty_minus | escape }}" title="{{ settings.pur_pdp_qty_minus | escape }}"{% endif %}><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+              <input id="pur-pdp-quantity" type="number" name="quantity" value="1" min="1" inputmode="numeric" readonly>
+              <button type="button" data-type="shop-quantity-plus"{% if settings.pur_pdp_qty_plus != blank %} aria-label="{{ settings.pur_pdp_qty_plus | escape }}" title="{{ settings.pur_pdp_qty_plus | escape }}"{% endif %}><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M12 5v14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+            </div>
+          </div>
+          <div class="pur-pdp__cta">
+            <button class="pur-pdp__btn pur-pdp__btn--line" type="button" data-type="main-product-add" data-f1genz-main-atc{% unless pur_pdp_buyable %} disabled{% endunless %}>
+              {%- if pur_pdp_buyable -%}
+                {%- if settings.pur_coll_them_vao_gio != blank -%}<span setting-id="pur_coll_them_vao_gio" setting-type="text">{{ settings.pur_coll_them_vao_gio | escape }}</span>{%- endif -%}
+              {%- else -%}
+                {%- if settings.pur_pdp_soldout_text != blank -%}<span setting-id="pur_pdp_soldout_text" setting-type="text">{{ settings.pur_pdp_soldout_text | escape }}</span>{%- endif -%}
+              {%- endif -%}
+            </button>
+            {%- if settings.pur_pdp_buy_now != blank -%}
+            <button class="pur-pdp__btn pur-pdp__btn--solid" type="button" data-type="main-product-buy"{% unless pur_pdp_buyable %} disabled{% endunless %} setting-id="pur_pdp_buy_now" setting-type="text">{{ settings.pur_pdp_buy_now | escape }}</button>
+            {%- endif -%}
+          </div>
+        </div>
+        {%- elsif pur_pdp_phone_href != blank and settings.pur_quickview_contact_label != blank -%}
+        <div class="pur-pdp__buy" data-f1genz-atc-block>
+          <div class="pur-pdp__cta">
+            <a class="pur-pdp__btn pur-pdp__btn--solid" href="tel:{{ pur_pdp_phone_href | escape }}" setting-id="pur_quickview_contact_label" setting-type="text">{{ settings.pur_quickview_contact_label | escape }}</a>
+          </div>
+        </div>
+        {%- endif -%}
+        {%- include 'product-routine' -%}
+        {%- if settings.main_product_share_check != false -%}
+          {%- include 'product-share' -%}
+        {%- endif -%}
+      </section>
+    </div>
+    {%- include 'product-tabs' -%}
+    {%- if store.metafields.f1genz.config != blank and settings.pur_curated_slider_enable != false -%}
+    <section class="pur-pdp__curated" data-pur-curated{% if settings.pur_curated_slider_title != blank %} aria-labelledby="pur-pdp-curated-title"{% endif %}>
+      {%- if settings.pur_curated_slider_title != blank -%}<h2 class="pur-pdp__heading" id="pur-pdp-curated-title" setting-id="pur_curated_slider_title" setting-type="text">{{ settings.pur_curated_slider_title | escape }}</h2>{%- endif -%}
+      <f1genz-curated-slider product-id="{{ product.id }}" orgid="{{ store.metafields.f1genz.config.value.orgid }}" slider-data="{{ product.metafields.f1genz_reviews.slider_data.value | escape }}"></f1genz-curated-slider>
+    </section>
+    {%- endif -%}
+    {%- if settings.main_product_relate_check != false -%}
+      {%- assign pur_pdp_relate_limit = settings.main_product_relate_limit | plus: 0 -%}
+      {%- if pur_pdp_relate_limit < 1 -%}{%- assign pur_pdp_relate_limit = 4 -%}{%- elsif pur_pdp_relate_limit > 12 -%}{%- assign pur_pdp_relate_limit = 12 -%}{%- endif -%}
+      {%- assign pur_pdp_relate_count = 0 -%}
+      {%- assign pur_pdp_seen = ',' | append: product.id | append: ',' -%}
+      {%- assign pur_pc_handle = '' -%}{%- include 'pur-primary-collection' -%}
+      {%- capture pur_pdp_relate_items -%}
+        {%- if pur_pc_handle != blank and collections[pur_pc_handle].products_count > 1 -%}{%- assign pur_pdp_src = collections[pur_pc_handle] -%}{%- include 'pur-related-pass' -%}{%- endif -%}
+        {%- for pur_pdp_pc2 in product.collections -%}
+          {%- if pur_pdp_relate_count < pur_pdp_relate_limit and pur_pdp_pc2.products_count > 1 -%}{%- assign pur_pdp_src = pur_pdp_pc2 -%}{%- include 'pur-related-pass' -%}{%- endif -%}
+        {%- endfor -%}
+      {%- endcapture -%}
+      {%- if pur_pdp_relate_count > 0 -%}
+      <section class="pur-pdp__related"{% if settings.main_product_relate_title != blank %} aria-labelledby="pur-pdp-related-title"{% endif %}>
+        {%- if settings.main_product_relate_title != blank -%}<h2 class="pur-pdp__heading" id="pur-pdp-related-title" setting-id="main_product_relate_title" setting-type="text">{{ settings.main_product_relate_title | escape }}</h2>{%- endif -%}
+        <div class="pur-pdp__rail">{{ pur_pdp_relate_items }}</div>
+      </section>
+      {%- endif -%}
+    {%- endif -%}
+  </div>
+</div>
+{%- if pur_pdp_price != 0 -%}
+<div class="pur-pdp__bar" data-f1genz-sticky-atc aria-hidden="true">
+  <div class="pur-pdp__bar-inner">
+    <div class="pur-pdp__bar-copy">
+      <span class="pur-pdp__bar-title">{{ product.name | escape }}</span>
+      <span class="pur-pdp__bar-price" data-f1genz-sticky-price>{{ pur_pdp_price | money | replace: ',', '.' }}</span>
+    </div>
+    <button type="button" class="pur-pdp__btn pur-pdp__btn--solid pur-pdp__bar-btn" data-type="main-product-add" data-f1genz-sticky-add tabindex="-1"{% unless pur_pdp_buyable %} disabled{% endunless %}>
+      {%- if pur_pdp_buyable -%}{{ settings.pur_coll_them_vao_gio | escape }}{%- else -%}{{ settings.pur_pdp_soldout_text | escape }}{%- endif -%}
+    </button>
+  </div>
+</div>
+{%- endif -%}

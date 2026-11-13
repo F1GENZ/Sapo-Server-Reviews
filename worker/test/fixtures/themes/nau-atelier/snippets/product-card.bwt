@@ -1,0 +1,79 @@
+{%- assign price = product.selected_or_first_available_variant.price -%}
+{%- assign compare = product.selected_or_first_available_variant.compare_at_price -%}
+{%- assign discount = 0 -%}
+{%- if compare > price -%}{%- assign discount = compare | minus: price -%}{%- endif -%}
+{%- assign discount_percentage = 0 -%}
+{%- if discount > 0 -%}{%- assign discount_percentage = discount | times: 100 | divided_by: compare | round -%}{%- endif -%}
+{%- if product and product != empty -%}
+{%- assign product_description_clean = product.content -%}
+<product-card class="product-card nau-product-card">
+  <article class="nau-product-card__inner">
+    <div class="nau-product-card__media-wrap">
+      <a class="nau-product-card__media nau-media" href="{{ product.url | escape }}" title="{{ product.name | escape }}">
+        {%- if product.featured_image -%}
+        <div class="nau-product-card__image">
+          {%- assign featured_image = product.featured_image.src -%}
+          {%- assign featured_image_alt = product.featured_image.alt -%}
+          {%- if featured_image_alt == blank -%}{%- assign featured_image_alt = product.name -%}{%- endif -%}
+          <img src="{{ featured_image | img_url: 'grande' | escape }}" srcset="{{ featured_image | img_url: 'grande' | escape }} 600w, {{ featured_image | img_url: '1024x1024' | escape }} 1024w" sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" alt="{{ featured_image_alt | escape }}" width="600" height="600"{% if lazyload != blank %} loading="{{ lazyload | escape }}"{% endif %} decoding="async" class="nau-product-card__img-primary">
+          {%- if product.images[1] -%}
+          {%- assign second_image = product.images[1].src -%}
+          {%- assign second_image_alt = product.images[1].alt -%}
+          {%- if second_image_alt == blank -%}{%- assign second_image_alt = product.name -%}{%- endif -%}
+          <img src="{{ second_image | img_url: 'grande' | escape }}" srcset="{{ second_image | img_url: 'grande' | escape }} 600w, {{ second_image | img_url: '1024x1024' | escape }} 1024w" sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" alt="{{ second_image_alt | escape }}" width="600" height="600" loading="lazy" decoding="async" class="nau-product-card__img-secondary">
+          {%- endif -%}
+        </div>
+        {%- endif -%}
+
+        {%- unless product.available -%}<div class="nau-product-card__badge" aria-hidden="true">Hết hàng</div>{%- endunless -%}
+        {%- if discount_percentage > 0 -%}<div class="nau-product-card__badge nau-product-card__badge--discount" aria-hidden="true">-{{ discount_percentage }}%</div>{%- endif -%}
+      </a>
+
+      <button type="button" class="nau-product-card__tool nau-product-card__tool--quickview" data-action="open-quickview" data-product-handle="{{ product.alias | escape }}" aria-label="Xem nhanh {{ product.name | escape }}" title="Xem nhanh">{%- include 'icon', name: 'eye-show' -%}</button>
+      {%- if settings.wishlist_enable -%}
+      {%- if settings.wishlist_show_on_card -%}
+      <button type="button" class="nau-product-card__tool nau-product-card__tool--wishlist" data-action="add-wishlist" data-product-id="{{ product.id | escape }}" data-product-handle="{{ product.alias | escape }}" aria-label="Thêm {{ product.name | escape }} vào yêu thích" title="Thêm vào yêu thích">{%- include 'icon', name: 'heart' -%}</button>
+      {%- endif -%}
+      {%- endif -%}
+      {%- if settings.compare_enable -%}
+      <button type="button" class="nau-product-card__tool nau-product-card__tool--compare" data-action="add-compare" data-product-id="{{ product.id | escape }}" data-product-handle="{{ product.alias | escape }}" aria-label="So sánh {{ product.name | escape }}" title="So sánh">{%- include 'icon', name: 'compare' -%}<span>So sánh</span></button>
+      {%- endif -%}
+    </div>
+
+    <div class="nau-product-card__body">
+      {%- if show_vendor and product.vendor != blank -%}
+      <div class="nau-product-card__vendor">
+        <span>{{ product.vendor | escape }}</span>
+      </div>
+      {%- endif -%}
+
+      <{{ card_heading_tag | default: 'h3' }} class="nau-product-card__title"><a href="{{ product.url | escape }}" title="{{ product.name | escape }}">{{ product.name | escape }}</a></{{ card_heading_tag | default: 'h3' }}>
+
+      <div class="nau-product-card__footer">
+        <div class="nau-product-card__price">
+          {%- if price == 0 -%}
+          <span>Liên hệ</span>
+          {%- else -%}
+          {%- if compare > price -%}<del class="nau-product-card__compare-price">{{ compare | money }}</del>{%- endif -%}
+          <span>{{ price | money }}</span>
+          {%- endif -%}
+        </div>
+
+        <div class="nau-product-card__actions">
+          <form action="/cart/add" method="POST">
+            <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id | escape }}">
+            <input type="hidden" name="quantity" value="1">
+            <button type="submit" class="nau-product-card__button" aria-label="Thêm vào giỏ {{ product.name | escape }}" {% unless product.available %}disabled{% endunless %}>
+              {%- if product.available -%}
+                Thêm vào giỏ
+              {%- else -%}
+                Hết hàng
+              {%- endif -%}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </article>
+</product-card>
+{%- endif -%}

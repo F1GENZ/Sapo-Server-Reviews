@@ -12,6 +12,7 @@ export interface Anchor {
   beforeLine: number;
   reason: string;
   strong?: boolean;
+  rank?: number;
 }
 
 type HtmlState = 'text' | 'tag' | 'script' | 'style' | 'comment';
@@ -218,34 +219,96 @@ export const findLoaderAnchor = (content: string): Anchor | null => {
 
 const PRODUCT_REVIEWS_RE = /\{%-?\s*include\s+['"]product-reviews['"]\s*-?%\}/;
 const RELATED_RE = /\{%-?\s*include\s+['"][^'"]*(?:related|recommend|upsell|cross-?sell|recently|viewed)[^'"]*['"]/i;
+const RELATED_ELEMENT_RE =
+  /^\s*<(?:section|div|aside|article|ul)\b[^>]*\b(?:class|id)\s*=\s*["'][^"']*(?:related|relate|recommend|upsell|cross-?sell|recently|viewed)[^"']*["']/i;
 const DESCRIPTION_RE = /\{\{\s*product\.(?:content|description|body_html)\s*\}\}/;
+const IF_OPEN_LINE_RE = /^\s*\{%-?\s*(?:if|unless)\b[^%]*-?%\}\s*(?:\{%-?\s*assign\b[^%]*-?%\}\s*)*$/;
+const TAG_ONLY_LINE_RE = /^\s*(?:\{%-?\s*(?:assign|if|endif|unless|endunless)\b[^%]*-?%\}\s*)+$/;
 
-export const findWidgetAnchor = (content: string): Anchor | null => {
+const sameBlocks = (a: string[], b: string[]): boolean => a.length === b.length && a.every((v, i) => v === b[i]);
+
+const hoistOutOfConditions = (content: string, line: number): number => {
+  const starts = lineStarts(content);
+  let current = line;
+  while (current > 0) {
+    const here = scanTo(content, starts[current]).blocks;
+    const top = here[here.length - 1];
+    if (top !== 'if' && top !== 'unless') return current;
+    let k = current - 1;
+    while (
+      k >= 0 &&
+      !IF_OPEN_LINE_RE.test(lineText(content, k)) &&
+      (lineText(content, k).trim() === '' || TAG_ONLY_LINE_RE.test(lineText(content, k)))
+    ) k -= 1;
+    if (k < 0 || !IF_OPEN_LINE_RE.test(lineText(content, k))) return current;
+    const before = scanTo(content, starts[k]).blocks;
+    const after = scanTo(content, starts[k + 1]).blocks;
+    if (after.length !== before.length + 1 || !sameBlocks(after, here)) return current;
+    current = k;
+  }
+  return current;
+};
+
+const beforeLineAnchor = (content: string, line: number, reason: string): Anchor | null => {
+  const hoisted = hoistOutOfConditions(content, line);
+  return checkedAnchor(content, hoisted, reason) ?? checkedAnchor(content, line, reason);
+};
+
+const containersBalancedBefore = (content: string, offset: number): boolean => {
+  const text = content
+    .slice(0, offset)
+    .replace(/\{%[\s\S]*?%\}|\{\{[\s\S]*?\}\}/g, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, '');
+  let depth = 0;
+  for (const m of text.matchAll(/<(\/?)(div|section|main|article|aside)\b[^>]*?(\/?)>/gi)) {
+    if (m[3]) continue;
+    depth += m[1] ? -1 : 1;
+    if (depth < 0) return false;
+  }
+  return depth === 0;
+};
+
+export const findWidgetAnchors = (content: string): Anchor[] => {
   const count = lineCount(content);
+  const found: Anchor[] = [];
+  const take = (rank: number, anchor: Anchor | null): boolean => {
+    if (!anchor) return false;
+    found.push({ ...anchor, rank, ...(rank === 0 ? { strong: true } : {}) });
+    return true;
+  };
   for (let i = 0; i < count; i += 1) {
     if (PRODUCT_REVIEWS_RE.test(lineText(content, i))) {
-      const anchor = checkedAnchor(content, i + 1, "Ngay sau khối đánh giá có sẵn của theme (include 'product-reviews')");
-      if (anchor) return { ...anchor, strong: true };
+      if (take(0, checkedAnchor(content, i + 1, "Ngay sau khối đánh giá có sẵn của theme (include 'product-reviews')"))) break;
     }
   }
   for (let i = 0; i < count; i += 1) {
-    if (RELATED_RE.test(lineText(content, i))) {
-      const anchor = checkedAnchor(content, i, 'Ngay trước khối sản phẩm liên quan');
-      if (anchor) return anchor;
-    }
+    if (!RELATED_RE.test(lineText(content, i))) continue;
+    if (take(1, beforeLineAnchor(content, i, 'Ngay trước khối sản phẩm liên quan'))) break;
   }
   for (let i = 0; i < count; i += 1) {
     const line = lineText(content, i);
     if (!DESCRIPTION_RE.test(line.replace(/<[^>]*>/g, ''))) continue;
-    const anchor = checkedAnchor(content, i + 1, 'Ngay sau phần mô tả sản phẩm');
-    if (anchor) return anchor;
+    if (take(2, checkedAnchor(content, i + 1, 'Ngay sau phần mô tả sản phẩm'))) break;
   }
-  return null;
+  for (let i = 0; i < count; i += 1) {
+    if (!RELATED_ELEMENT_RE.test(lineText(content, i))) continue;
+    if (take(3, beforeLineAnchor(content, i, 'Ngay trước phần tử sản phẩm liên quan'))) break;
+  }
+  const tail = 'Cuối template sản phẩm (không thấy khối đánh giá, liên quan hay mô tả để bám vào)';
+  const tailAnchor = checkedAnchor(content, count, tail) ?? checkedAnchor(content, count - 1, tail);
+  if (tailAnchor && containersBalancedBefore(content, lineStarts(content)[tailAnchor.beforeLine] ?? content.length)) take(4, tailAnchor);
+  return found.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
 };
+
+export const findWidgetAnchor = (content: string): Anchor | null => findWidgetAnchors(content)[0] ?? null;
 
 const HEADING_RE = /<h([1-6])\b[^>]*>[\s\S]{0,600}?\{\{\s*product\.(?:name|title)\b[\s\S]{0,300}?<\/h\1\s*>/gi;
 const TITLE_LINE_RE =
-  /^\s*<(div|p|span|a)\b[^>]*class\s*=\s*["'][^"']*(?:title|name)[^"']*["'][^>]*>.*\{\{\s*product\.(?:name|title)\b.*<\/\1\s*>\s*$/i;
+  /^\s*<([a-z][a-z0-9]*|\{\{[^}]*\}\})(?=[\s>])[^>]*class\s*=\s*["'][^"']*(?:title|name)[^"']*["'][^>]*>.*\{\{\s*product\.(?:name|title)\b.*<\/\1\s*>\s*$/i;
+const PRICE_LINE_RE = /^\s*<(?:div|p|span|ul)\b[^>]*class\s*=\s*["'][^"']*price[^"']*["'][^>]*>/i;
+
+const escapeRe = (value: string): string => value.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
 
 export const findBadgeAnchor = (content: string): Anchor | null => {
   const starts = lineStarts(content);
@@ -258,7 +321,7 @@ export const findBadgeAnchor = (content: string): Anchor | null => {
       const lineEnd = line + 1 < starts.length ? starts[line + 1] : content.length;
       if (content.slice(endOffset, lineEnd).trim() === '') {
         const anchor = checkedAnchor(content, line + 1, 'Ngay sau tiêu đề tên sản phẩm trong thẻ sản phẩm');
-        if (anchor) return anchor;
+        if (anchor) return { ...anchor, rank: 0 };
       }
     }
     HEADING_RE.lastIndex = match.index + 1;
@@ -269,11 +332,17 @@ export const findBadgeAnchor = (content: string): Anchor | null => {
     const line = lineText(content, i);
     const tag = TITLE_LINE_RE.exec(line)?.[1];
     if (!tag) continue;
-    const opens = (line.match(new RegExp(`<${tag}\\b`, 'gi')) ?? []).length;
-    const closes = (line.match(new RegExp(`</${tag}\\s*>`, 'gi')) ?? []).length;
+    const opens = (line.match(new RegExp(`<${escapeRe(tag)}(?=[\\s>])`, 'gi')) ?? []).length;
+    const closes = (line.match(new RegExp(`</${escapeRe(tag)}\\s*>`, 'gi')) ?? []).length;
     if (opens !== closes) continue;
     const anchor = checkedAnchor(content, i + 1, 'Ngay sau tiêu đề tên sản phẩm trong thẻ sản phẩm');
-    if (anchor) return anchor;
+    if (anchor) return { ...anchor, rank: 0 };
+  }
+  if (!/\{\{[^}]*\bproduct\.(?:url|name|title|id)\b/.test(content)) return null;
+  for (let i = 0; i < lines; i += 1) {
+    if (!PRICE_LINE_RE.test(lineText(content, i))) continue;
+    const anchor = checkedAnchor(content, i, 'Ngay trước khối giá (thẻ không có dòng tiêu đề đứng riêng)');
+    if (anchor) return { ...anchor, rank: 1 };
   }
   return null;
 };
@@ -298,4 +367,38 @@ export const surroundingLines = (content: string, beforeLine: number, radius = 2
   for (let i = Math.max(0, beforeLine - radius); i < beforeLine; i += 1) before.push(lineText(content, i));
   for (let i = beforeLine; i < Math.min(count, beforeLine + radius); i += 1) after.push(lineText(content, i));
   return { before, after };
+};
+
+export const includedSnippets = (content: string): string[] => {
+  const names = new Set<string>();
+  for (const m of content.matchAll(/\{%-?\s*include\s+['"]([^'"]+)['"]/g)) names.add(m[1]);
+  return [...names];
+};
+
+export const safeInsertionPoints = (content: string, maxLine = Number.POSITIVE_INFINITY): number[] => {
+  const last = Math.min(lineCount(content), maxLine);
+  const points: number[] = [];
+  for (let line = 1; line <= last; line += 1) if (isSafePoint(content, line)) points.push(line);
+  return points;
+};
+
+export const formatLineRanges = (lines: number[]): string => {
+  const parts: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    let j = i;
+    while (j + 1 < lines.length && lines[j + 1] === lines[j] + 1) j += 1;
+    parts.push(j > i ? `${lines[i]}-${lines[j]}` : String(lines[i]));
+    i = j + 1;
+  }
+  return parts.join(',');
+};
+
+export const nearestSafePoint = (content: string, line: number, radius = 2): number | null => {
+  if (!Number.isInteger(line)) return null;
+  for (const delta of [0, 1, -1, 2, -2]) {
+    if (Math.abs(delta) > radius) continue;
+    if (isSafePoint(content, line + delta)) return line + delta;
+  }
+  return null;
 };

@@ -1,0 +1,64 @@
+ {% assign on_sale = false %}
+{% if product.compare_at_price_min > product.price_min %}
+  {% assign on_sale = true %}
+{% endif %}
+
+
+{% assign sold_out = true %}
+{% if product.available  %}
+  {% assign sold_out = false %}
+{% endif %}
+{% assign variantCount = product.variants | size %}
+
+  <div class="product-image"> <a href="{{ product.url | within:collection }}" title="{{ product.name }}"> 
+	  <img class="small-image" src="{{ product.featured_image.src | img_url:'large' }}" alt="{{ product.name }}" width="230"> </a> 
+  </div>
+  <div class="product-shop">
+    <h2 class="product-name"><a href="{{ product.url | within:collection }}" title="{{ product.name }}">{{ product.name }}</a></h2>
+    {% if product.available %}
+    <div class="price-box">
+      {% if on_sale %}
+      <p class="old-price"> 
+        <span class="price-label">Giá cũ:</span> 
+        <span class="price" id="old-price">{{ product.compare_at_price_max | money }}</span> 
+      </p>
+      <p class="special-price"> 
+        <span class="price-label">Giá khuyến mại</span> 
+        <span class="price">{{ product.price_min | money }}</span> 
+      </p>
+      {% else %}
+       <span class="regular-price"> <span class="price">{{ product.price | money }}</span> </span> 
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="price-box">
+      <span class="regular-price"> <span class="price">Hết hàng</span> </span> 
+    </div>
+    {% endif %}
+    <div class="desc std">
+     <p> {{ product.content | strip_html | truncatewords: 25 }}<a class="link-learn" href="{{ product.url | within:collection }}">Xem thêm</a> </p>
+    </div>
+    <div class="actions">
+      <form action="/cart/add" method="post" class="variants" id="product-actions-{{ product.id }}" enctype="multipart/form-data">
+          {% if sold_out %}
+          <button disabled="disabled" class="btn-cart button" title="Cho vào giỏ hàng"><span>Hết hàng</span></button>
+          {% elsif variantCount > 1 %}
+		  
+          <button class="btn-cart button btn-more" title="Chọn sản phẩm"  type="button" onclick="window.location.href='{{product.url}}'" ><span>Chọn sản phẩm</span></button>
+          {% else %}
+		   <input type="hidden" name="variantId" value="{{ product.variants[0].id }}" />
+          <button class="btn-cart button add_to_cart" title="Cho vào giỏ hàng"><span>Cho vào giỏ hàng</span></button>
+          {% endif %}
+      </form>     
+    </div>
+  </div>
+
+
+
+
+
+
+
+
+
+  

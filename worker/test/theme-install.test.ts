@@ -1,6 +1,8 @@
+import { parseInsertionAnswer } from '../src/core/ai/ai.service';
 import { describe, expect, it } from 'vitest';
 import {
   findBadgeAnchor,
+  findWidgetAnchors,
   findLoaderAnchor,
   findWidgetAnchor,
   insertIncludeBefore,
@@ -87,9 +89,25 @@ describe('theme-analysis', () => {
     expect(findBadgeAnchor(CARD)?.beforeLine).toBe(3);
   });
 
-  it('refuses a badge anchor when other markup follows the heading on the same line', () => {
+  it('falls back to the price block when the heading shares its line with other markup', () => {
     const tight = CARD.replace('</a></h3>', '</a></h3></div>');
-    expect(findBadgeAnchor(tight)).toBeNull();
+    expect(findBadgeAnchor(tight)).toMatchObject({ beforeLine: 3, rank: 1 });
+  });
+
+  it('does not place a badge in a placeholder card that never references the product', () => {
+    const demo = ['<div class="card">', '  <a href="#"><h3>Product-none-name</h3></a>', '  <div class="price">0đ</div>', '</div>', ''].join('\n');
+    expect(findBadgeAnchor(demo)).toBeNull();
+  });
+
+  it('anchors the badge after a title element whose tag name is a liquid variable', () => {
+    const card = [
+      '<div class="card">',
+      "  <{{ heading | default: 'h3' }} class=\"card__title\"><a href=\"{{ product.url }}\">{{ product.name | escape }}</a></{{ heading | default: 'h3' }}>",
+      '  <div class="card__price">{{ product.price | money }}</div>',
+      '</div>',
+      '',
+    ].join('\n');
+    expect(findBadgeAnchor(card)).toMatchObject({ beforeLine: 2, rank: 0 });
   });
 
   it('anchors the badge after a one-line title element identified by its class, as in DefaultTheme', () => {
@@ -151,13 +169,15 @@ describe('theme-analysis', () => {
 
 const STORE = 'demo.mysapo.net';
 
-const makeService = (opts: { role: string; failLiveOn?: string; aiLine?: number | null }) => {
-  const files = new Map<string, string>([
-    ['layouts/theme.bwt', LAYOUT],
-    ['templates/product.bwt', "{%- include 'product-snippet' -%}\n"],
-    ['snippets/product-snippet.bwt', PRODUCT_SNIPPET],
-    ['snippets/product-item.bwt', CARD],
-  ]);
+const makeService = (opts: { role: string; failLiveOn?: string; aiLine?: number | null; files?: Map<string, string> }) => {
+  const files =
+    opts.files ??
+    new Map<string, string>([
+      ['layouts/theme.bwt', LAYOUT],
+      ['templates/product.bwt', "{%- include 'product-snippet' -%}\n"],
+      ['snippets/product-snippet.bwt', PRODUCT_SNIPPET],
+      ['snippets/product-item.bwt', CARD],
+    ]);
   const log: string[] = [];
   const sapoApi = {
     listThemes: async () => [{ id: 1, name: 'T', role: opts.role, processing: false }],
@@ -179,7 +199,13 @@ const makeService = (opts: { role: string; failLiveOn?: string; aiLine?: number 
     setNx: async (key: string) => (redisKeys.has(key) ? false : (redisKeys.add(key), true)),
     del: async (key: string) => (redisKeys.delete(key) ? 1 : 0),
   };
-  const ai = { suggestInsertionLine: async () => (opts.aiLine ? { line: opts.aiLine, reason: 'test' } : null) };
+  const aiInputs: Array<{ target: string; key: string; candidates?: string }> = [];
+  const ai = {
+    suggestInsertionLine: async (_s: string, input: { target: string; key: string; candidates?: string }) => {
+      aiInputs.push(input);
+      return opts.aiLine ? { line: opts.aiLine, reason: 'test' } : null;
+    },
+  };
   const fetched: string[] = [];
   const fakeFetch = (async (url: string) => {
     fetched.push(url);
@@ -196,7 +222,7 @@ const makeService = (opts: { role: string; failLiveOn?: string; aiLine?: number 
     redis as never,
     { fetch: fakeFetch, settleMs: 0 },
   );
-  return { service, files, log, fetched };
+  return { service, files, log, fetched, aiInputs };
 };
 
 describe('ThemeInstallService', () => {
@@ -305,5 +331,173 @@ describe('ThemeInstallService', () => {
     const [a, b] = await Promise.allSettled([service.apply(STORE, '1', plan.hash), service.apply(STORE, '1', plan.hash)]);
     const statuses = [a.status, b.status].sort();
     expect(statuses).toEqual(['fulfilled', 'rejected']);
+  });
+});
+
+declare global {
+  interface ImportMeta {
+    glob(pattern: string, options: { query: string; import: string; eager: true }): Record<string, unknown>;
+  }
+}
+
+const FIXTURE_FILES = import.meta.glob('./fixtures/themes/**/*.bwt', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+
+const fixtureTheme = (name: string): Map<string, string> => {
+  const prefix = `./fixtures/themes/${name}/`;
+  const files = new Map<string, string>();
+  for (const [path, content] of Object.entries(FIXTURE_FILES)) if (path.startsWith(prefix)) files.set(path.slice(prefix.length), content);
+  return files;
+};
+
+const planOf = async (name: string) => {
+  const ctx = makeService({ role: 'unpublished', files: fixtureTheme(name) });
+  const plan = await ctx.service.plan(STORE, '1');
+  return { ...ctx, plan, edit: (target: string) => plan.edits.filter((e) => e.target === target) };
+};
+
+describe('ThemeInstallService on real Sapo themes', () => {
+  it('stock DefaultTheme: loader in layout, widget after the description, badge after the one-line item-title', async () => {
+    const { edit } = await planOf('default-theme');
+    expect(edit('loader')[0]).toMatchObject({ status: 'insert', file: 'layouts/theme.bwt', source: 'rule' });
+    expect(edit('widget')[0]).toMatchObject({ status: 'insert', file: 'templates/product.bwt', source: 'rule', reason: 'Ngay sau phần mô tả sản phẩm' });
+    expect(edit('badge')).toEqual([expect.objectContaining({ status: 'insert', file: 'snippets/product-grid-item.bwt' })]);
+  });
+
+  it('finds product-snippet through templates/product.bwt even when many product.* templates exist', async () => {
+    const { edit, plan } = await planOf('seafoods-0717');
+    expect(edit('widget')[0]).toMatchObject({ status: 'insert', file: 'snippets/product-snippet.bwt', afterLine: 250 });
+    expect(plan.warnings.some((w) => w.includes('khối đánh giá cũ'))).toBe(true);
+  });
+
+  it('Nau Atelier: badge after a title element with a variable tag name, widget before the related wrapper', async () => {
+    const { edit } = await planOf('nau-atelier');
+    expect(edit('badge')[0]).toMatchObject({ status: 'insert', file: 'snippets/product-card.bwt', reason: 'Ngay sau tiêu đề tên sản phẩm trong thẻ sản phẩm' });
+    expect(edit('widget')[0]).toMatchObject({ status: 'insert', file: 'templates/product.bwt' });
+    expect(edit('widget')[0].preview?.after[0]).toContain('relate-wrap');
+  });
+
+  it('S2 Spa: the widget is placed before the {% if %} that toggles the related section, not inside it', async () => {
+    const { edit } = await planOf('s2-spa');
+    const widget = edit('widget')[0];
+    expect(widget).toMatchObject({ status: 'insert', file: 'templates/product.bwt' });
+    expect(widget.preview?.after[0]).toContain('settings.product_related_enable');
+  });
+
+  it('Purity: a review widget hand-installed in an included tab snippet counts as installed', async () => {
+    const { edit } = await planOf('purity');
+    expect(edit('widget')).toEqual([expect.objectContaining({ status: 'present', file: 'snippets/product-tabs.bwt' })]);
+  });
+
+  it.each(['default-theme', 'seafoods-0717', 'nau-atelier', 's2-spa'])(
+    '%s: apply then uninstall restores every file byte for byte and a second plan finds nothing to insert',
+    async (name) => {
+      const { service, files, plan } = await planOf(name);
+      const before = new Map(files);
+      await service.apply(STORE, '1', plan.hash);
+      const again = await service.plan(STORE, '1');
+      expect(again.edits.every((e) => e.status !== 'insert')).toBe(true);
+      await service.uninstall(STORE, '1');
+      expect([...files.keys()].sort()).toEqual([...before.keys()].sort());
+      for (const [key, value] of before) expect(files.get(key)).toBe(value);
+    },
+  );
+
+  it('never writes a Sapo-incompatible filter or a render tag into the theme', async () => {
+    for (const name of ['default-theme', 'seafoods-0717', 'nau-atelier', 's2-spa']) {
+      const { service, files, plan } = await planOf(name);
+      const before = new Map(files);
+      await service.apply(STORE, '1', plan.hash);
+      for (const [key, value] of files) {
+        if (before.get(key) === value) continue;
+        const added = value.split('\n').filter((line) => !(before.get(key) ?? '').split('\n').includes(line)).join('\n');
+        expect(added).not.toMatch(/\|\s*slice|\{%-?\s*render\b/);
+      }
+    }
+  });
+});
+
+describe('ThemeInstallService fallbacks', () => {
+  const stuck = new Map<string, string>([
+    ['layouts/theme.bwt', LAYOUT],
+    ['templates/product.bwt', '{% for p in product.images %}\n<img src="{{ p.src }}">\n{% endfor %}'],
+    ['snippets/product-item.bwt', '<div class="x">{{ product.url }}</div>\n'],
+  ]);
+
+  it('tells the merchant what to paste, with the exact code, when no safe position exists', async () => {
+    const ctx = makeService({ role: 'unpublished', files: new Map(stuck) });
+    const result = await ctx.service.plan(STORE, '1');
+    const widget = result.edits.find((e) => e.target === 'widget');
+    expect(widget).toMatchObject({ status: 'skipped' });
+    expect(widget?.manual?.code).toContain('<f1genz-reviews');
+    expect(widget?.manual?.code).toContain('product-id="{{ product.id }}"');
+    const badge = result.edits.find((e) => e.target === 'badge');
+    expect(badge).toMatchObject({ status: 'skipped' });
+    expect(badge?.manual?.code).toContain('<f1genz-rating-badge');
+    expect(result.warnings.some((w) => w.includes('Dán đoạn mã'))).toBe(true);
+  });
+
+  it('asks the AI only with positions that pass the safety scan and snaps an off-by-one answer to a safe line', async () => {
+    const layout = '<script>\nvar a = 1;\n</script>\n{{ content_for_layout }}\n<p>x</p>\n';
+    const files = new Map([['layouts/theme.bwt', layout]]);
+    const { service, aiInputs } = makeService({ role: 'unpublished', files, aiLine: 2 });
+    const plan = await service.plan(STORE, '1');
+    const loader = plan.edits.find((e) => e.target === 'loader');
+    expect(aiInputs[0].candidates).toBeDefined();
+    expect(loader).toMatchObject({ status: 'insert', source: 'ai' });
+    expect(isSafePoint(layout, loader?.afterLine ?? -1)).toBe(true);
+  });
+
+  it('rejects an AI answer that is not near any safe position', async () => {
+    const layout = '{% for i in x %}\n<p>a</p>\n<p>b</p>\n<p>c</p>\n<p>d</p>\n<p>e</p>\n{% endfor %}\n{{ content_for_layout }}\n';
+    const { service } = makeService({ role: 'unpublished', files: new Map([['layouts/theme.bwt', layout]]), aiLine: 4 });
+    const plan = await service.plan(STORE, '1');
+    expect(plan.edits.find((e) => e.target === 'loader')).toMatchObject({ status: 'skipped' });
+    expect(plan.edits.find((e) => e.target === 'loader')?.manual?.code).toContain('f1genz-storefront.js');
+  });
+});
+
+describe('parseInsertionAnswer', () => {
+  it.each([
+    ['plain JSON text', '{"line": 12, "reason": "sau mô tả"}', 12],
+    ['JSON in a code fence', '```json\n{"line": 7, "reason": "x"}\n```', 7],
+    ['a JSON object already parsed by Workers AI', { line: 30, reason: 'x' }, 30],
+    ['a numeric string', '{"line": "15", "reason": "x"}', 15],
+  ])('accepts %s', (_name, answer, line) => {
+    expect(parseInsertionAnswer(answer)).toMatchObject({ line });
+  });
+
+  it.each([
+    ['not sure (0)', '{"line": 0}'],
+    ['prose only', 'Tôi nghĩ nên chèn sau mô tả'],
+    ['broken JSON', '{"line": 12,'],
+    ['negative', { line: -3 }],
+    ['fraction', { line: 2.5 }],
+    ['nothing', null],
+  ])('rejects %s with a reason code', (_name, answer) => {
+    expect(parseInsertionAnswer(answer)).toHaveProperty('rejected');
+  });
+});
+
+describe('widget anchor at the end of the template', () => {
+  it('accepts the end of a template whose containers are all closed', () => {
+    const content = '<div class="a">\n  <h1>{{ product.name }}</h1>\n</div>\n';
+    expect(findWidgetAnchors(content)).toEqual([expect.objectContaining({ beforeLine: 3, rank: 4 })]);
+  });
+
+  it('refuses the end of a template that leaves a div open, so the widget cannot land in a wrapper', () => {
+    const content = '<div class="a">\n  <h1>{{ product.name }}</h1>\n';
+    expect(findWidgetAnchors(content)).toEqual([]);
+  });
+
+  it('ignores tags inside script, comments and liquid when counting containers', () => {
+    const content = '<div>\n<script>var s = "<div>";</script>\n<!-- <section> -->\n{% if a %}</div>{% endif %}\n';
+    expect(findWidgetAnchors(content)).toEqual([expect.objectContaining({ rank: 4, beforeLine: 4 })]);
+  });
+
+  it('ranks an element-based related section below the description', () => {
+    const content = ['<div>{{ product.content }}</div>', '<section class="pdp-related">', '</section>', ''].join('\n');
+    const anchors = findWidgetAnchors(content);
+    expect(anchors.map((a) => a.rank)).toEqual([2, 3, 4]);
+    expect(anchors[1].reason).toBe('Ngay trước phần tử sản phẩm liên quan');
   });
 });

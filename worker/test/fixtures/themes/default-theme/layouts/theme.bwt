@@ -1,0 +1,68 @@
+<!doctype html>
+<!--[if lt IE 7]><html class="no-js lt-ie9 lt-ie8 lt-ie7" lang="en"> <![endif]-->
+<!--[if IE 7]><html class="no-js lt-ie9 lt-ie8" lang="en"> <![endif]-->
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en"> <![endif]-->
+<!--[if IE 9 ]><html class="ie9 no-js"> <![endif]-->
+<!--[if (gt IE 9)|!(IE)]><!--> <html> <!--<![endif]-->
+<head>
+
+  <!-- Basic page needs ================================================== -->
+  <meta charset="utf-8">
+
+  <!-- Title and description ================================================== -->
+  <title>
+  {{ page_title }}{% if current_tags %} &ndash; tagged "{{ current_tags | join: ', ' }}"{% endif %}{% if current_page != 1 %} {{ current_page }}{% endif %}{% unless page_title contains store.name %} &ndash; {{ store.name }}{% endunless %}
+  </title>
+
+  {% if page_description %}
+  <meta name="description" content="{{ page_description | escape }}">
+  {% endif %}
+
+  <!-- Product meta ================================================== -->
+  {% include 'fb-open-graph-tags' %}
+  
+
+  <!-- Helpers ================================================== -->
+  <link rel="canonical" href="{{ canonical_url }}">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <!-- Favicon -->
+  <link rel="shortcut icon" href="{{ 'favicon.png' | asset_url }}" type="image/x-icon" />
+  <!-- Scripts -->
+  {% include 'head_scripts' %}  
+<!-- Styles -->
+  {% include 'head_styles' %}
+  <!-- Header hook for plugins ================================================== -->
+  {{ content_for_header }}
+   <!--[if lt IE 9]>
+        <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+        <script src="http://css3-mediaqueries-js.googlecode.com/svn/trunk/css3-mediaqueries.js"></script>
+    <![endif]-->
+    <!--[if IE 7]>
+          {{ 'font-awesome-ie7.css' | asset_url | stylesheet_tag }}
+    <![endif]-->
+  <!--[if lt IE 9]>
+  {{ '//html5shiv.googlecode.com/svn/trunk/html5.js' | script_tag }}
+  <![endif]-->
+
+
+  {% if template contains 'customers' %}
+    {{ 'common.js' | bizweb_asset_url | script_tag }}
+    {{ 'bizweb-api.js' | bizweb_asset_url | script_tag }}
+    {{ 'customer.js'  | bizweb_asset_url | script_tag }}
+  {% endif %}
+
+</head>
+  <body id="{{ page_title | handleize }}" class=" {% if customer %}customer-logged-in {% endif %} cms-index-index cms-home-page" >  
+    {% include 'header' %}  
+  
+    
+    {{ content_for_layout }}
+  
+    {% include 'footer' %}
+    {% include 'footer_scripts' %}
+	{% include 'api.jquery.custom' %}
+  <a href="#" id="toTop" style="display: block;"><span id="toTopHover" style="opacity: 0;"></span></a>
+  </body>
+
+  </html>

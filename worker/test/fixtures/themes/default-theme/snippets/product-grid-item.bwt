@@ -1,0 +1,75 @@
+{% assign on_sale = false %}
+{% if product.compare_at_price_min > product.price_min %}
+  {% assign on_sale = true %}
+{% endif %}
+
+{% assign sold_out = true %}
+{% if product.available  %}
+  {% assign sold_out = false %}
+{% endif %}
+
+<div class="col-item">
+  {% if on_sale %}
+  <div class="sale-label sale-top-right">Sale</div>
+  {% endif %}
+  <div class="item-inner">
+    <div class="product-wrapper">
+      <div class="thumb-wrapper"><a href="{{ product.url  }}" class="thumb flip"><span class="face"><img src="{{ product.featured_image.src | img_url:'large' }}" alt="{{ product.name }}" width="268"></span>
+		  {% capture number_of_images %}{{ product.images | size }}{% endcapture %}
+		  {% assign number_images = number_of_images | plus:0 %}
+		  {% if number_images > 1 %}
+		  <span class="face back"><img src="{{ product.images[1].src | img_url:'large' }}" title="{{ product.name }}" width="268" alt="{{ product.name }}"></span>
+		  {% else %}
+		  <span class="face back"><img src="{{ product.featured_image.src | img_url:'large' }}" alt="{{ product.name }}" width="268"></span>
+		  {% endif %}
+		  </a>
+      </div>
+                          
+    </div>
+    <div class="item-info">
+      <div class="info-inner">
+        <div class="item-title"> <a href="{{ product.url }}" title="{{ product.name }}">{{ product.name }} </a> </div>
+        <div class="item-content">
+          
+          <div class="item-price">         
+           {% if product.available %}
+            <div class="price-box"> 
+              {% if on_sale %}
+              <p class="old-price"> 
+                <span class="price-label">Giá cũ:</span> 
+                <span class="price" id="old-price">{{ product.compare_at_price_min | money }}</span> 
+              </p>
+              <p class="special-price"> 
+                <span class="price-label">Giá khuyến mại</span> 
+                <span class="price">{{ product.price_min | money }}</span> 
+              </p>
+              {% else %}
+              <span class="regular-price"> <span class="price">{{ product.price | money }}</span> </span>
+			   {% endif %}
+           
+            </div>
+			  {% else %}
+			  <div class="price-box"> 
+				  <span class="regular-price"> <span class="price">Hết hàng</span> </span> 
+			  </div>
+			  {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <form action="/cart/add" method="post" class="variants" id="product-actions-{{ product.id }}" enctype="multipart/form-data">
+          {% assign variantCount = product.variants | size %}
+          {% if sold_out %}
+          <button disabled="disabled" class="button btn-cart" title="Cho vào giỏ hàng"><span>Hết hàng</span></button>
+          {% elsif variantCount > 1 %}
+          <button class="button btn-cart btn-more" title="Chọn sản phẩm" type="button" onclick="window.location.href='{{product.url}}'" ><span>Chọn sản phẩm</span></button>
+          {% else %}
+			 <input type="hidden" name="variantId" value="{{ product.variants[0].id }}" />
+          <button class="button btn-cart add_to_cart" title="Cho vào giỏ hàng"><span>Cho vào giỏ hàng</span></button>
+          {% endif %}
+        </form>       
+      </div>
+    </div>
+  </div>
+  
+</div>

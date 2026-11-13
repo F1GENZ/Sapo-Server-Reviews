@@ -23,14 +23,14 @@ The merchant picks a theme from `GET /admin/themes.json`. The app reads the them
 | Target | File | Inserted line |
 |---|---|---|
 | `loader` | the layout that contains `content_for_layout` | `{% include 'f1genz-reviews-loader' %}` before `</head>` (else before `</body>`) |
-| `widget` | product template or `snippets/product-snippet*` | `{% include 'f1genz-reviews-widget' %}` after `{% include 'product-reviews' %}`, else before a related-products include |
-| `badge` | `snippets/product-item*`, `product-card*`, `product-grid*` ... | `{% include 'f1genz-rating-badge-card' %}` after the heading that holds `product.name` |
+| `widget` | the product page include chain (see Anchor coverage) | `{% include 'f1genz-reviews-widget' %}` at the best ranked position |
+| `badge` | `snippets/product-item*`, `product-card*`, `product-grid*` ... | `{% include 'f1genz-rating-badge-card' %}` after the heading that holds `product.name`, else before the price block |
 
 New snippet files: `snippets/f1genz-reviews-loader.bwt`, `f1genz-reviews-widget.bwt`, `f1genz-rating-badge-card.bwt`. Nothing else in the theme is changed.
 
 What counts as already installed (`present`, left alone):
 
-- the candidate layout, product and card files contain our include, the loader, `<f1genz-reviews*>`, `<f1genz-qna*>` or `<f1genz-rating-badge>`;
+- the candidate layout, product chain and card files contain our include, the loader, `<f1genz-reviews*>`, `<f1genz-qna*>` or `<f1genz-rating-badge>` (a widget hand-installed in an included tab snippet is found through the chain);
 - any other `snippets/*review*`, `*f1genz*` or `*loader*` file (first 12, ours excluded) loads F1GENZ, for example a custom `lxs-reviews-loader`;
 - on the live theme, the rendered home page or a product page already contains the loader or `<f1genz-reviews*>`. This is an extra signal; a failed fetch is ignored. A loader injected only by script is not visible to it.
 
@@ -49,17 +49,38 @@ Sapo has no theme preview URL (the Haravan `?themeid=` form, `theme_id`, `previe
 
 A merchant who edits or replaces the theme later loses the includes; run the card again. `uninstall` removes only lines that are exactly our include tags and the three snippet files.
 
-## Anchor coverage (measured 2026-11-12, read-only, 8 themes of 2 F1GENZ shops)
+## Anchor coverage (measured 2026-11-13, dry-run on 17 Sapo themes, read-only)
 
-| Target | Rule match | Already integrated | No rule match |
-|---|---|---|---|
-| loader | 6 | 2 | 0 |
-| widget | 5 | 1 | 2 (stock `DefaultTheme`, custom lux-shoes theme) |
-| badge (per card file, 49 files) | 24 | 5 | 20 |
+Corpus: the 7 themes of `f1genz-seafoods.mysapo.net` (stock `DefaultTheme`, a clean copy of it, four 2025 F1GENZ SeaFood themes and the live one; files read with the admin cookie session, GET only; asset keys kept in the order the Sapo API returned them) and 10 Sapo themes in the workspace (F1GENZ GenZ, Hestia, Purity, Lux Shoes, Aqua, Devs2 S2 Spa, Nau Atelier and two converter outputs). A theme counts as a success when the loader, the widget and at least one card badge are `insert` or `present`.
 
-Most no-match card files are variant cards (`product-card-demo`, `product-card-variant`, `product-item-compare`, `product-item-together`, `product-grid-item`). The sample is mostly one theme family, so these figures do not predict coverage on arbitrary Sapo themes.
+This is an in-sample measurement: the rules were tuned on these same themes and most of the 17 belong to the F1GENZ / converter family. There is no held-out set, and `DefaultTheme` is the only stock Sapo theme in it. Read the figures as "no known theme in our own set is skipped", not as a rate for an arbitrary Sapo theme.
 
-When no rule matches, Workers AI proposes a line number (15 s timeout, rate limited; a failure just means no AI anchor). It is accepted only if it passes rule 1 above, is always marked `AI` in the plan, and is not a substitute for reading the diff. The model was not evaluated on real theme files.
+| Measure | Before | After |
+|---|---|---|
+| themes fully handled (loader + widget + >=1 badge) | 5 / 17 | 17 / 17 |
+| widget `insert` / `present` / `skipped` | 4 / 1 / 12 | 11 / 6 / 0 |
+| card files `insert` / `present` / `skipped` (79 files) | 44 / 8 / 27 | 51 / 8 / 20 |
+| theme file reads per plan, sum over the corpus | 211 | 160 |
+
+Where the 11 widget inserts land (rank, see below): rank 0 five, rank 1 none, rank 2 two, rank 3 four (Nau Atelier, F1GENZ GenZ, Devs2 S2 Spa, F1GENZ Aqua), rank 4 none. Rank 3 is a heuristic on class names and has not been rendered; the 6 `present` widgets are hand installs found in the product chain or in a review snippet.
+
+The widget was skipped on 12 themes. In the seafoods family the candidate list was cut to the first 8 keys of `templates/product*` and `snippets/product-*`; with the key order the Sapo API returned, `snippets/product-snippet.bwt` fell outside the cut on 3 of the 7 themes (17/04, 18/04 and the live one), and was inside it on the others, so that failure depended on key order. In the other themes no rule matched: the related section is an element rather than an include, the description sits in a variable, or the review block lives in an included tab snippet. Candidates now come from the include chain of `templates/product.bwt` (depth 2, at most 8 files, snippets whose name looks like a product, tab, detail or info part; galleries, cards, options, related, review and similar names are not followed), so the result no longer depends on key order. The chain is also what `uninstall` scans, together with the layout, product and card key patterns. Without `templates/product.bwt` the old key patterns apply, minus `product.item_*`, `product.article` and `product.viewed`. Residual risk: if an include of ours sits in a file outside that scan (a hand-moved include), `uninstall` still deletes the three snippet files and that include would point at a missing snippet; how Sapo renders that was not measured.
+
+Widget position, best rule first (the first file in chain order wins a tie):
+
+| Rank | Rule |
+|---|---|
+| 0 | right after `{% include 'product-reviews' %}` (Sapo's own block; plan warns that both blocks show) |
+| 1 | right before an include whose name says related, recommend, upsell, cross-sell, recently or viewed |
+| 2 | right after the line that holds `{{ product.content }}` |
+| 3 | right before an element whose `class` or `id` says related, relate, recommend, upsell, cross-sell, recently or viewed; when that element sits directly inside an `{% if %}` (only blank or `assign` lines between), the point moves in front of the `{% if %}` so the widget is not hidden with the section |
+| 4 | end of the product template, only when every `div`, `section`, `main`, `article` and `aside` opened in the file is closed before that point (so the widget cannot land inside a wrapper the file leaves open); the plan warns about it. Otherwise the widget is `skipped` with the paste-by-hand code |
+
+Card badge position: after the one-line heading or the one-line `class="...title|name..."` element that holds `product.name` (the tag name may be a Liquid variable, as in `<{{ heading | default: 'h3' }}>`), else before the first price block, but only in a file that references `product.url`, `product.name`, `product.title` or `product.id` (placeholder cards are left alone).
+
+When no rule gives a safe point, the target is `skipped` with a `manual` field: where to paste and the exact code. The card shows it with a copy button and a `Dán tay` tag; the plan warning names the target. Nothing is skipped silently.
+
+Workers AI is asked only when no rule produced an anchor. The prompt now carries the exact list of valid line numbers (from the safety scan), the answer is parsed whether Workers AI returns text, a code-fenced JSON, an already parsed object or a numeric string (`parseInsertionAnswer`), and a line that is off by up to 2 is snapped to the nearest valid point. A rejection is logged with a reason code (`no_json`, `invalid_json`, `empty`, `line_invalid`, `not_safe_point`). The earlier code read only string answers, so a pre-parsed `{ "line": n }` was discarded as empty; this is a measured defect of the parser, not a confirmed cause of the 2026-11-12 DefaultTheme run, which was not logged. The AI path has not been exercised against Workers AI: bindings for it are remote only, and this change was developed without remote access.
 
 ## Real-shop verification (2026-11-12)
 
@@ -75,3 +96,7 @@ The service bundle ran in the admin tab of `f1genz-seafoods.mysapo.net` (admin c
 | `plan` on the live theme (read only) | manual installs recognised as `present`; 2 card files proposed |
 
 Not covered: the app token path (`read_themes,write_themes` not yet granted), the live-theme write path with its storefront checks (only unit-tested against a fake storefront), the AI path, and rendering of the inserted Liquid (Sapo cannot preview an unpublished theme).
+
+## Round trip on whole themes (2026-11-13, simulated store)
+
+The service ran `plan`, `apply`, a second `plan` and `uninstall` against an in-memory store holding every `.bwt` file of each corpus theme (no network, no shop). All 17 themes: the second plan reported nothing left to insert, and after `uninstall` every file matched its original SHA-256 and no file was added, with one expected exception: the `DefaultTheme` copy that already carries a loader include and snippet from the 2026-11-12 test, which `uninstall` removed (2 files differ from the pulled copy, 0 differ from the clean copy). This exercises the write path of the current code but not Sapo's API, so it does not replace the real-shop run above.

@@ -1,0 +1,259 @@
+{%- assign selected_variant = product.selected_or_first_available_variant -%}
+{%- assign available = selected_variant.available -%}
+{%- assign product_description_clean = product.content -%}
+
+<product-template class="nau-page nau-product-page product-template">
+  {%- include 'section-breadcrumb' -%}
+
+  <section class="nau-section nau-section--tight">
+    <div class="nau-shell nau-product-detail product-template__wrapper">
+      <div class="nau-product-detail__media product-template__media-wrapper{% if settings.product_lightbox_enable %} lightbox-enabled{% endif %}">
+        <div class="swiper product-template__media-slider">
+          <div class="swiper-wrapper">
+            {%- if product.images.size > 0 -%}
+            {%- for image in product.images -%}
+            {%- assign image_alt = image.alt -%}
+            {%- if image_alt == blank -%}{%- assign image_alt = product.name -%}{%- endif -%}
+            <div class="swiper-slide product-template__media-slide" data-image="{{ image.src | escape }}">
+              <div class="nau-media nau-product-detail__image-frame">
+                <img src="{{ image | img_url: '1024x1024' | escape }}" srcset="{{ image | img_url: '2048x2048' | escape }} 2048w, {{ image | img_url: '1024x1024' | escape }} 1024w, {{ image | img_url: 'grande' | escape }} 600w" sizes="(min-width: 1024px) 52vw, 100vw" alt="{{ image_alt | escape }}" width="1024" height="1024" loading="{% if forloop.first %}eager{% else %}lazy{% endif %}" decoding="async" {% if forloop.first %}fetchpriority="high"{% endif %} class="product-template__media-image" data-product-featured-image{% if forloop.first %} data-product-featured{% endif %}>
+              </div>
+            </div>
+            {%- endfor -%}
+            {%- endif -%}
+            {%- for media in product.media -%}
+            {%- if media.media_type == 'external_video' -%}
+            <div class="swiper-slide product-template__media-slide product-template__media-slide--video" data-video-host="{{ media.host | escape }}">
+              <div class="nau-media product-template__video-wrapper">
+                <iframe src="{{ media | external_video_url | escape }}{% if media.host == 'youtube' %}&enablejsapi=1&mute=1{% endif %}" class="product-template__video-iframe" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen loading="lazy"></iframe>
+              </div>
+            </div>
+            {%- endif -%}
+            {%- endfor -%}
+          </div>
+          {%- if product.images.size > 1 -%}
+          <button type="button" class="swiper-button-next" aria-label="Ảnh tiếp theo"></button>
+          <button type="button" class="swiper-button-prev" aria-label="Ảnh trước"></button>
+          {%- endif -%}
+        </div>
+        {%- assign has_video = false -%}
+        {%- for media in product.media -%}{%- if media.media_type == 'external_video' -%}{%- assign has_video = true -%}{%- endif -%}{%- endfor -%}
+        {%- if product.images.size > 1 or has_video -%}
+        <div class="swiper product-template__media-thumbs">
+          <div class="swiper-wrapper">
+            {%- for image in product.images -%}
+            {%- assign image_alt = image.alt -%}
+            {%- if image_alt == blank -%}{%- assign image_alt = product.name -%}{%- endif -%}
+            <div class="swiper-slide product-template__media-thumb">
+              <img src="{{ image | img_url: 'large' | escape }}" srcset="{{ image | img_url: 'large' | escape }} 120w, {{ image | img_url: '1024x1024' | escape }} 240w" sizes="80px" alt="{{ image_alt | escape }}" width="120" height="120" loading="lazy" decoding="async" class="product-template__media-thumb-image">
+            </div>
+            {%- endfor -%}
+            {%- for media in product.media -%}
+            {%- if media.media_type == 'external_video' -%}
+            {%- assign media_alt = media.alt -%}
+            {%- if media_alt == blank -%}{%- assign media_alt = product.name -%}{%- endif -%}
+            <div class="swiper-slide product-template__media-thumb product-template__media-thumb--video">
+              <img src="{{ media.preview_image.src | product_img_url: 'compact' | escape }}" alt="{{ media_alt | escape }}" loading="lazy" decoding="async" class="product-template__media-thumb-image" width="120" height="68">
+            </div>
+            {%- endif -%}
+            {%- endfor -%}
+          </div>
+        </div>
+        {%- endif -%}
+      </div>
+
+      <product-template-info class="nau-product-detail__info product-template__info">
+        {%- if settings.product_show_brand and product.vendor != blank -%}<span class="nau-eyebrow">{{ product.vendor | escape }}</span>{%- endif -%}
+        <h1 class="nau-title nau-title--md product-template__title">{{ product.name | escape }}</h1>
+
+        <ul class="product-template__meta">
+          {%- if settings.product_show_sku -%}
+          <li class="product-template__meta-item" data-product-sku-item{% if selected_variant.sku == blank %} hidden{% endif %}>
+            <span class="product-template__meta-label">Mã</span>
+            <strong data-product-sku>{{ selected_variant.sku | escape }}</strong>
+          </li>
+          {%- endif -%}
+          {%- if settings.product_show_type and product.type != blank -%}
+          <li class="product-template__meta-item">
+            <span class="product-template__meta-label">Loại</span>
+            <strong>{{ product.type | link_to_type }}</strong>
+          </li>
+          {%- endif -%}
+          {%- if settings.product_show_availability -%}
+          <li class="product-template__meta-item">
+            <span class="product-template__meta-label">Tình trạng</span>
+            {%- if available -%}
+            <strong data-product-available class="product-template__status--available">Còn hàng</strong>
+            {%- else -%}
+            <strong data-product-available class="product-template__status--unavailable">Hết hàng</strong>
+            {%- endif -%}
+          </li>
+          {%- endif -%}
+        </ul>
+
+        <div class="product-template__price-box">
+          <div class="product-template__price-current" data-product-price>
+            {%- if selected_variant.price == 0 -%}Liên hệ{%- else -%}{{ selected_variant.price | money }}{%- endif -%}
+          </div>
+          <div class="product-template__price-compare{% if selected_variant.compare_at_price and selected_variant.compare_at_price > selected_variant.price %} is-visible{% endif %}" data-product-compare>
+            {{ selected_variant.compare_at_price | money }}
+          </div>
+          <div class="product-template__price-sale{% if selected_variant.compare_at_price and selected_variant.compare_at_price > selected_variant.price %} is-visible{% endif %}" data-product-sale>
+            {%- if selected_variant.compare_at_price and selected_variant.compare_at_price > selected_variant.price -%}
+              {%- assign percent = selected_variant.compare_at_price | minus: selected_variant.price | times: 100.0 | divided_by: selected_variant.compare_at_price | round -%}
+              -{{ percent }}%
+            {%- endif -%}
+          </div>
+        </div>
+
+        <div class="product-template__variant-picker">
+          {%- include 'product-variant-picker' -%}
+        </div>
+
+        <div class="product-template__actions">
+          <div class="product-template__quantity-group">
+            <span class="product-template__quantity-label">Số lượng</span>
+            {%- include 'quantity-selector' with form: "", product: product, variant: selected_variant, value: 1, min: 1, step: 1, id_suffix: 'product-main' -%}
+          </div>
+
+          {%- if settings.product_coupon_enable -%}
+          {%- include 'coupon-preview' -%}
+          {%- endif -%}
+
+          <div class="product-template__buttons">
+            <button {% unless available %}disabled{% endunless %} id="product-template__add" data-product-add type="button" class="nau-button nau-button--secondary product-template__add-btn">
+              <span class="button-spinner hidden"></span>
+              <span class="button-content">{%- include 'icon', name: 'cart' -%}<span>Thêm vào giỏ</span></span>
+            </button>
+            {%- if settings.compare_enable -%}
+            <button type="button" class="product-template__compare-btn" data-action="add-compare" data-product-id="{{ product.id | escape }}" data-product-handle="{{ product.alias | escape }}" aria-label="So sánh sản phẩm này" title="So sánh">
+              {%- include 'icon', name: 'compare' -%}
+            </button>
+            {%- endif -%}
+            {%- if settings.wishlist_enable and settings.product_show_wishlist -%}
+            <button type="button" class="product-template__wishlist-btn" data-action="add-wishlist" data-product-id="{{ product.id | escape }}" data-product-handle="{{ product.alias | escape }}" aria-label="Thêm vào yêu thích" title="Thêm vào yêu thích">
+              {%- include 'icon', name: 'heart' -%}
+            </button>
+            {%- endif -%}
+            <button {% unless available %}disabled{% endunless %} id="product-template__buy" data-product-buy data-contact-link="{{ settings.product_contact_link | escape }}" type="button" class="nau-button product-template__buy-btn" aria-label="Mua ngay sản phẩm này">
+              <span class="button-spinner hidden"></span>
+              <span class="button-content">Mua ngay</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="product-template__commitments">
+          {%- for i in (1..4) -%}
+          {%- capture check -%}product_commitment_check_{{ i }}{%- endcapture -%}
+          {%- capture image -%}product_commitment_image_{{ i }}.png{%- endcapture -%}
+          {%- capture text -%}product_commitment_text_{{ i }}{%- endcapture -%}
+          {%- if settings[check] -%}
+          <div class="product-template__commitment-item">
+            <img src="{{ image | asset_url | escape }}" alt="{{ settings[text] | escape }}" width="36" height="36" loading="lazy" decoding="async">
+            <strong>{{ settings[text] | escape }}</strong>
+          </div>
+          {%- endif -%}
+          {%- endfor -%}
+        </div>
+
+        {%- if settings.product_sharing_enable -%}
+        <div class="product-template__sharing">
+          {%- include 'share-buttons' -%}
+        </div>
+        {%- endif -%}
+      </product-template-info>
+    </div>
+  </section>
+
+  <section class="nau-section nau-section--tight">
+    <div class="nau-shell">
+      <div class="product-template__tabs">
+        <div class="product-template__tabs-nav" role="tablist">
+          {%- if product_description_clean != blank -%}
+          <button type="button" class="product-template__tab-btn active" data-tab="description" role="tab" aria-selected="true" aria-controls="panel-description" id="tab-description">
+            <span>{{ settings.product_tab_description_name | escape }}</span>
+          </button>
+          {%- endif -%}
+          {%- for i in (1..3) -%}
+            {%- capture enable_key -%}product_tab_{{ i }}_enable{%- endcapture -%}
+            {%- capture name_key -%}product_tab_{{ i }}_name{%- endcapture -%}
+            {%- capture page_key -%}product_tab_{{ i }}_page{%- endcapture -%}
+            {%- assign tab_page_handle = settings[page_key] -%}
+            {%- if settings[enable_key] and tab_page_handle != blank -%}
+            <button type="button" class="product-template__tab-btn" data-tab="tab{{ i }}" role="tab" aria-selected="false" aria-controls="panel-tab{{ i }}" id="tab-tab{{ i }}">
+              <span>{{ settings[name_key] | escape }}</span>
+            </button>
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+        <div class="product-template__tabs-content">
+          {%- if product_description_clean != blank -%}
+          <div class="product-template__tab-panel active" data-panel="description" role="tabpanel" aria-labelledby="tab-description" id="panel-description">
+            <div class="product-template__description-wrapper" data-description-wrapper>
+              <h2 class="visually-hidden">Mô tả sản phẩm</h2><div class="product-template__description-content" data-description-content>{{ product_description_clean }}</div>
+              {%- if settings.product_description_readmore -%}
+              <button type="button" class="product-template__description-toggle hidden" data-description-toggle data-readmore-enabled="{{ settings.product_description_readmore }}" data-max-height="{{ settings.product_description_max_height | escape }}">
+                <span data-toggle-text-more>Đọc thêm</span>
+                <span data-toggle-text-less class="hidden">Thu gọn</span>
+              </button>
+              {%- endif -%}
+            </div>
+          </div>
+          {%- endif -%}
+          {%- for i in (1..3) -%}
+            {%- capture enable_key -%}product_tab_{{ i }}_enable{%- endcapture -%}
+            {%- capture page_key -%}product_tab_{{ i }}_page{%- endcapture -%}
+            {%- assign tab_page_handle = settings[page_key] -%}
+            {%- if settings[enable_key] and tab_page_handle != blank -%}
+            {%- assign tab_page_content = pages[tab_page_handle].content -%}
+            {%- if tab_page_content != blank -%}
+            <div class="product-template__tab-panel" data-panel="tab{{ i }}" role="tabpanel" aria-labelledby="tab-tab{{ i }}" id="panel-tab{{ i }}">
+              <div class="product-template__description-wrapper" data-description-wrapper>
+                <div class="product-template__description-content" data-description-content>
+                  <h2 class="visually-hidden">{{ pages[tab_page_handle].title | escape }}</h2>{{ tab_page_content }}
+                </div>
+                {%- if settings.product_description_readmore -%}
+                <button type="button" class="product-template__description-toggle hidden" data-description-toggle data-readmore-enabled="{{ settings.product_description_readmore }}" data-max-height="{{ settings.product_description_max_height | escape }}">
+                  <span data-toggle-text-more>Đọc thêm</span>
+                  <span data-toggle-text-less class="hidden">Thu gọn</span>
+                </button>
+                {%- endif -%}
+              </div>
+            </div>
+            {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+      </div>
+
+      {%- if settings.product_related_enable and product.collections.size > 0 -%}
+      {%- assign collection_relate_object = product.collections.first -%}
+      {%- assign limit = settings.product_related_limit | plus: 0 -%}
+      {%- assign current_product_id = product.id -%}
+      <product-template-relate class="product-template__relate">
+        <div class="nau-section-head">
+          <h2 class="nau-title nau-title--md">{{ settings.product_related_title | escape }}</h2>
+        </div>
+        <div class="product-template__relate-wrap swiper">
+          <ul class="product-cards nau-product-grid product-template__relate-grids swiper-wrapper" role="presentation">
+            {%- for product in collection_relate_object.products limit: limit -%}
+            {%- unless product.id == current_product_id -%}
+            <li class="product-cards__item swiper-slide">
+              {%- include 'product-card' with product, lazyload: 'lazy', show_vendor: true -%}
+            </li>
+            {%- endunless -%}
+            {%- endfor -%}
+          </ul>
+          <button type="button" class="swiper-button-prev" aria-label="Sản phẩm trước"></button>
+          <button type="button" class="swiper-button-next" aria-label="Sản phẩm tiếp theo"></button>
+        </div>
+      </product-template-relate>
+      {%- endif -%}
+    </div>
+  </section>
+</product-template>
+
+{%- include 'product-sticky-add' -%}
+{%- if settings.product_lightbox_enable -%}<product-lightbox class="product-lightbox"></product-lightbox>{%- endif -%}
+{%- include 'coupon-modal' -%}
+{%- include 'size-guide-modal' -%}

@@ -48,6 +48,24 @@ const buildPrompt = (input: ReplySuggestionInput): string =>
     'Chỉ trả về nội dung câu trả lời, không kèm giải thích.',
   ].join('\n');
 
+export const parseInsertionAnswer = (answer: unknown): { line: number; reason: string } | { rejected: string } => {
+  let payload = answer;
+  if (typeof payload === 'string') {
+    const json = /\{[\s\S]*\}/.exec(payload)?.[0];
+    if (!json) return { rejected: 'no_json' };
+    try {
+      payload = JSON.parse(json);
+    } catch {
+      return { rejected: 'invalid_json' };
+    }
+  }
+  if (!payload || typeof payload !== 'object') return { rejected: 'empty' };
+  const { line, reason } = payload as { line?: unknown; reason?: unknown };
+  const value = typeof line === 'string' && /^\s*\d+\s*$/.test(line) ? Number(line) : line;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) return { rejected: 'line_invalid' };
+  return { line: value, reason: typeof reason === 'string' ? stripMarkup(reason).slice(0, 200) : '' };
+};
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
@@ -132,7 +150,7 @@ export class AiService {
 
   async suggestInsertionLine(
     storeDomain: string,
-    input: { target: 'loader' | 'widget' | 'badge'; key: string; numbered: string },
+    input: { target: 'loader' | 'widget' | 'badge'; key: string; numbered: string; candidates?: string },
   ): Promise<{ line: number; reason: string } | null> {
     if (!this.workersAi) return null;
     await this.rateLimit.assertAllowed(
@@ -159,6 +177,7 @@ export class AiService {
             content: [
               `Mục tiêu: ${goal}.`,
               'Điểm chèn phải ở giữa hai phần tử HTML hoàn chỉnh, không nằm trong thuộc tính thẻ, <script>, <style>, và không nằm trong {% for %}, {% capture %}, {% comment %}.',
+              ...(input.candidates ? [`Chỉ được chọn một trong các số dòng hợp lệ sau (dòng mới chèn ngay sau dòng đó): ${input.candidates}.`] : []),
               `File: ${input.key}`,
               '<<<FILE',
               input.numbered,
@@ -169,13 +188,16 @@ export class AiService {
         max_tokens: 120,
         temperature: 0,
       }), new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Workers AI timeout')), AI_TIMEOUT_MS))]);
-      const text = this.extractWorkersAiText(result);
-      const json = /\{[\s\S]*\}/.exec(text)?.[0];
-      if (!json) return null;
-      const parsed = JSON.parse(json) as { line?: unknown; reason?: unknown };
-      if (typeof parsed.line !== 'number' || !Number.isInteger(parsed.line) || parsed.line < 1) return null;
-      const reason = typeof parsed.reason === 'string' ? stripMarkup(parsed.reason).slice(0, 200) : '';
-      return { line: parsed.line, reason };
+      const answer =
+        result && typeof result === 'object' && 'response' in result && result.response && typeof result.response === 'object'
+          ? result.response
+          : this.extractWorkersAiText(result);
+      const parsed = parseInsertionAnswer(answer);
+      if ('rejected' in parsed) {
+        this.logger.warn(`Workers AI theme anchor rejected for ${storeDomain} target=${input.target} key=${input.key}: ${parsed.rejected}`);
+        return null;
+      }
+      return parsed;
     } catch (error) {
       this.logger.warn(
         `Workers AI theme anchor failed for ${storeDomain}: ${error instanceof Error ? error.message : 'unknown error'}`,

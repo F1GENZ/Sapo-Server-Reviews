@@ -28,6 +28,28 @@ const STATUS_TAG = {
   skipped: { color: "default", text: "Bỏ qua" },
 };
 
+const ManualPaste = ({ manual }) => (
+  <Flex vertical gap={4} style={{ marginTop: 6 }}>
+    <Text type="secondary">{manual.instruction}</Text>
+    <Paragraph copyable={{ text: manual.code }} style={{ marginBottom: 0 }}>
+      <pre
+        style={{
+          margin: 0,
+          padding: 8,
+          background: "#fafafa",
+          border: "1px solid #f0f0f0",
+          borderRadius: 6,
+          fontSize: 12,
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+        }}
+      >
+        {manual.code}
+      </pre>
+    </Paragraph>
+  </Flex>
+);
+
 const ROLE_TAG = {
   main: { color: "red", text: "Đang xuất bản" },
 };
@@ -217,13 +239,14 @@ const ThemeInstallCard = () => {
                 <List.Item>
                   <Flex vertical style={{ width: "100%", minWidth: 0 }}>
                     <Flex align="center" gap={8} wrap="wrap">
-                      <Tag color={STATUS_TAG[edit.status].color}>{STATUS_TAG[edit.status].text}</Tag>
+                      <Tag color={edit.manual ? "orange" : STATUS_TAG[edit.status].color}>{edit.manual ? "Dán tay" : STATUS_TAG[edit.status].text}</Tag>
                       <Text strong>{TARGET_LABEL[edit.target]}</Text>
                       {edit.source === "ai" ? <Tag color="purple">AI đề xuất</Tag> : null}
                       {edit.file ? <Text code>{edit.file}</Text> : null}
                     </Flex>
                     <Text type="secondary">{edit.reason}</Text>
                     {edit.preview ? <Preview preview={edit.preview} /> : null}
+                    {edit.manual ? <ManualPaste manual={edit.manual} /> : null}
                   </Flex>
                 </List.Item>
               )}

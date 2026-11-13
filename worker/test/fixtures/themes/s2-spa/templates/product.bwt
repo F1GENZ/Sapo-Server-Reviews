@@ -1,0 +1,249 @@
+{%- assign selected_variant = product.selected_or_first_available_variant -%}
+{%- assign available = selected_variant.available -%}
+{%- assign product_description_clean = product.content -%}
+{%- assign product_summary = product.content | strip_html | strip | truncatewords: 34 -%}
+
+<product-template class="bed-product product-template">
+  {%- include 'section-breadcrumb' -%}
+
+  <section class="bed-product__main">
+    <div class="container">
+      <div class="bed-product__layout product-template__wrapper">
+        <div class="bed-product__media product-template__media-wrapper{% if settings.product_lightbox_enable %} lightbox-enabled{% endif %}" data-landmark="product-gallery">
+          <div class="swiper product-template__media-slider">
+            <div class="swiper-wrapper">
+              {%- for image in product.images -%}
+                {%- assign image_alt = image.alt | default: product.name -%}
+              <div class="swiper-slide product-template__media-slide" data-image="{{ image.src | escape }}">
+                <div class="bed-product__image-frame">
+                  <img src="{{ image | img_url: '1024x1024' | escape }}" srcset="{{ image | img_url: '2048x2048' | escape }} 2048w, {{ image | img_url: '1024x1024' | escape }} 1024w, {{ image | img_url: 'grande' | escape }} 600w" sizes="(min-width: 1024px) 55vw, 100vw" alt="{{ image_alt | escape }}" width="1024" height="1024" loading="{% if forloop.first %}eager{% else %}lazy{% endif %}" decoding="async"{% if forloop.first %} fetchpriority="high"{% endif %} class="product-template__media-image" data-product-featured-image{% if forloop.first %} data-product-featured{% endif %}>
+                </div>
+              </div>
+              {%- endfor -%}
+            </div>
+            {%- if product.images.size > 1 -%}
+            <button type="button" class="swiper-button-prev" aria-label="Ảnh trước"></button>
+            <button type="button" class="swiper-button-next" aria-label="Ảnh tiếp theo"></button>
+            {%- endif -%}
+          </div>
+          {%- if product.images.size > 1 -%}
+          <div class="swiper product-template__media-thumbs" aria-label="Ảnh thu nhỏ sản phẩm">
+            <div class="swiper-wrapper">
+              {%- for image in product.images -%}
+                {%- assign image_alt = image.alt | default: product.name -%}
+              <div class="swiper-slide product-template__media-thumb"><img src="{{ image | img_url: 'large' | escape }}" alt="{{ image_alt | escape }}" width="120" height="120" loading="lazy" decoding="async" class="product-template__media-thumb-image"></div>
+              {%- endfor -%}
+            </div>
+          </div>
+          {%- endif -%}
+        </div>
+
+        <product-template-info class="bed-product__info product-template__info" data-landmark="product-purchase-panel">
+          <div class="bed-product__intro">
+            {%- if settings.product_show_brand and product.vendor != blank -%}<span class="bed-eyebrow">{{ product.vendor | escape }}</span>{%- endif -%}
+            <h1 class="product-template__title">{{ product.name | escape }}</h1>
+            {%- if product_summary != blank -%}<p class="bed-product__summary">{{ product_summary | escape }}</p>{%- endif -%}
+          </div>
+
+          <ul class="product-template__meta">
+            {%- if settings.product_show_sku -%}<li class="product-template__meta-item" data-product-sku-item{% if selected_variant.sku == blank %} hidden{% endif %}><span class="product-template__meta-label">Mã</span><strong data-product-sku>{{ selected_variant.sku | escape }}</strong></li>{%- endif -%}
+            {%- if settings.product_show_type and product.type != blank -%}<li class="product-template__meta-item"><span class="product-template__meta-label">Loại</span><strong>{{ product.type | escape }}</strong></li>{%- endif -%}
+            {%- if settings.product_show_availability -%}<li class="product-template__meta-item"><span class="product-template__meta-label">Tình trạng</span>{%- if available -%}<strong data-product-available class="product-template__status--available">Còn hàng</strong>{%- else -%}<strong data-product-available class="product-template__status--unavailable">Hết hàng</strong>{%- endif -%}</li>{%- endif -%}
+          </ul>
+
+          <div class="product-template__price-box">
+            <div class="product-template__price-current" data-product-price>{%- if selected_variant.price == 0 -%}Liên hệ{%- else -%}{{ selected_variant.price | money }}{%- endif -%}</div>
+            <div class="product-template__price-compare{% if selected_variant.compare_at_price > selected_variant.price %} is-visible{% endif %}" data-product-compare>{%- if selected_variant.compare_at_price > selected_variant.price -%}{{ selected_variant.compare_at_price | money }}{%- endif -%}</div>
+            <div class="product-template__price-sale{% if selected_variant.compare_at_price > selected_variant.price %} is-visible{% endif %}" data-product-sale>{%- if selected_variant.compare_at_price > selected_variant.price -%}{%- assign percent = selected_variant.compare_at_price | minus: selected_variant.price | times: 100.0 | divided_by: selected_variant.compare_at_price | round -%}-{{ percent }}%{%- endif -%}</div>
+          </div>
+
+          {%- include 'product-flash-deal' -%}
+
+          <div class="product-template__variant-picker">{%- include 'product-variant-picker' -%}</div>
+
+          <div class="product-template__actions">
+            <div class="product-template__quantity-group">
+              <span class="product-template__quantity-label">SỐ LƯỢNG</span>
+              {%- include 'quantity-selector' with form: '', product: product, variant: selected_variant, value: 1, min: 1, step: 1, id_suffix: 'product-main' -%}
+            </div>
+            
+            {%- include 'coupon-preview' -%}
+
+            <div class="product-template__buttons">
+              <button id="product-template__add" data-product-add type="button" class="spa-btn spa-btn--outline product-template__add-btn"{% unless available %} hidden{% endunless %}>
+                <span class="button-spinner hidden"></span>
+                <span class="button-content">{%- include 'icon', name: 'cart' -%}<span>THÊM VÀO GIỎ</span></span>
+              </button>
+
+              <button id="product-template__buy" data-product-buy data-contact-link="{{ settings.product_contact_link | escape }}" type="button" class="spa-btn spa-btn--primary product-template__buy-btn"{% unless available %} hidden{% endunless %}>
+                <span class="button-spinner hidden"></span>
+                <span class="button-content">MUA NGAY</span>
+              </button>
+
+              <button type="button" class="spa-btn spa-btn--primary product-template__notify-btn" data-product-notify data-action="open-notify-modal" data-product-title="{{ product.name | escape }}" data-product-handle="{{ product.alias | escape }}"{% if available %} hidden{% endif %}>
+                <svg class="icon icon-bell" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                <span>NHẬN THÔNG BÁO KHI CÓ HÀNG</span>
+              </button>
+              {%- if settings.product_booking_type != blank and settings.product_booking_label != blank and product.type == settings.product_booking_type -%}
+                <button type="button" class="spa-btn spa-btn--outline product-template__booking-btn" data-action="open-booking-modal" data-booking-service="{{ product.name | escape }}" setting-id="product_booking_label" setting-type="text">{{ settings.product_booking_label | escape }}</button>
+              {%- endif -%}
+              {%- if settings.wishlist_enable and settings.product_show_wishlist -%}
+                <button type="button" class="spa-icon-btn product-template__wishlist-btn" data-action="add-wishlist" data-product-wishlist data-product-id="{{ product.id | escape }}" data-product-handle="{{ product.alias | escape }}" aria-label="Thêm vào yêu thích" aria-pressed="false">
+                  {%- include 'icon', name: 'heart' -%}
+                </button>
+              {%- endif -%}
+
+              {%- if settings.compare_enable -%}
+                <button type="button" class="spa-icon-btn product-template__compare-btn" data-action="add-compare" data-product-id="{{ product.id | escape }}" data-product-handle="{{ product.alias | escape }}" aria-label="So sánh sản phẩm" aria-pressed="false">
+                  {%- include 'icon', name: 'compare' -%}
+                </button>
+              {%- endif -%}
+            </div>
+          </div>
+
+          {%- include 'product-bought-together' -%}
+
+          {%- if settings.bed_product_commitment_check_1 or settings.bed_product_commitment_check_2 or settings.bed_product_commitment_check_3 or settings.bed_product_commitment_check_4 -%}
+          <div class="product-template__commitments spa-commitments-card">
+            {%- if settings.bed_product_commitment_check_1 and settings.bed_product_commitment_text_1 != blank -%}
+            <div class="product-template__commitment-item">
+              <div class="spa-commitment-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C5A059" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+              </div>
+              <div class="spa-commitment-text">
+                <span setting-id="bed_product_commitment_text_1" setting-type="textarea">{{ settings.bed_product_commitment_text_1 | escape }}</span>
+              </div>
+            </div>
+            {%- endif -%}
+
+            {%- if settings.bed_product_commitment_check_2 and settings.bed_product_commitment_text_2 != blank -%}
+            <div class="product-template__commitment-item">
+              <div class="spa-commitment-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C5A059" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+              </div>
+              <div class="spa-commitment-text">
+                <span setting-id="bed_product_commitment_text_2" setting-type="textarea">{{ settings.bed_product_commitment_text_2 | escape }}</span>
+              </div>
+            </div>
+            {%- endif -%}
+
+            {%- if settings.bed_product_commitment_check_3 and settings.bed_product_commitment_text_3 != blank -%}
+            <div class="product-template__commitment-item">
+              <div class="spa-commitment-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C5A059" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              </div>
+              <div class="spa-commitment-text">
+                <span setting-id="bed_product_commitment_text_3" setting-type="textarea">{{ settings.bed_product_commitment_text_3 | escape }}</span>
+              </div>
+            </div>
+            {%- endif -%}
+
+            {%- if settings.bed_product_commitment_check_4 and settings.bed_product_commitment_text_4 != blank -%}
+            <div class="product-template__commitment-item">
+              <div class="spa-commitment-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C5A059" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+              </div>
+              <div class="spa-commitment-text">
+                <span setting-id="bed_product_commitment_text_4" setting-type="textarea">{{ settings.bed_product_commitment_text_4 | escape }}</span>
+              </div>
+            </div>
+            {%- endif -%}
+          </div>
+          {%- endif -%}
+
+          <div class="product-template__sharing spa-product-sharing">
+            {%- include 'share-buttons' -%}
+          </div>
+        </product-template-info>
+      </div>
+    </div>
+  </section>
+
+  <section class="bed-product__details">
+    <div class="container">
+      {%- if settings.bed_product_detail_title != blank -%}
+      <div class="bed-product__details-head bed-section-heading">
+        <span class="spa-eyebrow-gold">THÔNG TIN LIỆU TRÌNH & SẢN PHẨM</span>
+        <h2 setting-id="bed_product_detail_title" setting-type="text">{{ settings.bed_product_detail_title | escape }}</h2>
+      </div>
+      {%- endif -%}
+      <div class="product-template__tabs">
+        <div class="product-template__tabs-nav" role="tablist" aria-label="Thông tin chi tiết">
+          {%- if product_description_clean != blank -%}<button type="button" class="product-template__tab-btn active" data-tab="description" role="tab" aria-selected="true" aria-controls="panel-description" id="tab-description">{{ settings.bed_product_tab_description_name | escape }}</button>{%- endif -%}
+          {%- for i in (1..3) -%}
+            {%- capture enable_key -%}bed_product_tab_{{ i }}_enable{%- endcapture -%}
+            {%- capture name_key -%}bed_product_tab_{{ i }}_name{%- endcapture -%}
+            {%- capture page_key -%}bed_product_tab_{{ i }}_page{%- endcapture -%}
+            {%- assign tab_page_handle = settings[page_key] -%}
+            {%- if settings[enable_key] and tab_page_handle != blank and pages[tab_page_handle].content != blank -%}<button type="button" class="product-template__tab-btn" data-tab="tab{{ i }}" role="tab" aria-selected="false" aria-controls="panel-tab{{ i }}" id="tab-tab{{ i }}">{{ settings[name_key] | escape }}</button>{%- endif -%}
+          {%- endfor -%}
+        </div>
+        <div class="product-template__tabs-content">
+          {%- if product_description_clean != blank -%}
+          <div class="product-template__tab-panel active" data-panel="description" role="tabpanel" aria-labelledby="tab-description" id="panel-description">
+            <div class="product-template__description-wrapper" data-description-wrapper>
+              <div class="product-template__description-content" data-description-content>{{ product_description_clean }}</div>
+              {%- if settings.product_description_readmore -%}<button type="button" class="product-template__description-toggle hidden" data-description-toggle data-readmore-enabled="{{ settings.product_description_readmore }}" data-max-height="{{ settings.product_description_max_height | escape }}"><span data-toggle-text-more>Đọc thêm</span><span data-toggle-text-less class="hidden">Thu gọn</span></button>{%- endif -%}
+            </div>
+          </div>
+          {%- endif -%}
+          {%- for i in (1..3) -%}
+            {%- capture enable_key -%}bed_product_tab_{{ i }}_enable{%- endcapture -%}
+            {%- capture page_key -%}bed_product_tab_{{ i }}_page{%- endcapture -%}
+            {%- assign tab_page_handle = settings[page_key] -%}
+            {%- if settings[enable_key] and tab_page_handle != blank and pages[tab_page_handle].content != blank -%}
+            <div class="product-template__tab-panel" data-panel="tab{{ i }}" role="tabpanel" aria-labelledby="tab-tab{{ i }}" id="panel-tab{{ i }}">
+              <div class="product-template__description-wrapper" data-description-wrapper><div class="product-template__description-content" data-description-content>{{ pages[tab_page_handle].content }}</div>{%- if settings.product_description_readmore -%}<button type="button" class="product-template__description-toggle hidden" data-description-toggle data-readmore-enabled="{{ settings.product_description_readmore }}" data-max-height="{{ settings.product_description_max_height | escape }}"><span data-toggle-text-more>Đọc thêm</span><span data-toggle-text-less class="hidden">Thu gọn</span></button>{%- endif -%}</div>
+            </div>
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {%- if settings.product_related_enable and product.collections.size > 0 -%}
+  {%- assign collection_relate_object = product.collections.first -%}
+  {%- assign current_product_id = product.id -%}
+  {%- assign related_limit = settings.product_related_limit | plus: 0 -%}
+  {%- if related_limit <= 0 -%}{%- assign related_limit = 8 -%}{%- endif -%}
+  <section class="bed-product__related" data-landmark="related-products">
+    <div class="container">
+      <product-template-relate class="product-template__relate">
+        <div class="bed-product__related-head"><div class="bed-section-heading"><span class="spa-eyebrow-gold">LIỆU TRÌNH LIÊN QUAN</span><h2 setting-id="bed_product_related_title" setting-type="text">{{ settings.bed_product_related_title | escape }}</h2></div></div>
+        <div class="product-template__relate-wrap swiper">
+          <ul class="product-cards product-template__relate-grids swiper-wrapper" role="list">
+            {%- for product in collection_relate_object.products limit: related_limit -%}
+              {%- unless product.id == current_product_id -%}<li class="product-cards__item swiper-slide">{%- include 'product-card' with product, lazyload: 'lazy', show_vendor: true -%}</li>{%- endunless -%}
+            {%- endfor -%}
+          </ul>
+          <button type="button" class="swiper-button-prev" aria-label="Sản phẩm trước"></button>
+          <button type="button" class="swiper-button-next" aria-label="Sản phẩm tiếp theo"></button>
+        </div>
+      </product-template-relate>
+    </div>
+  </section>
+  {%- endif -%}
+
+  <product-viewed class="bed-product__viewed" data-limit="12">
+    <div class="container">
+      <div class="bed-product__viewed-head bed-section-heading">
+        <span class="spa-eyebrow-gold">LIỆU TRÌNH ĐÃ XEM</span>
+        <h2 setting-id="bed_product_viewed_title" setting-type="text">{{ settings.bed_product_viewed_title | escape }}</h2>
+      </div>
+      <div class="product-viewed__wrap swiper">
+        <ul class="product-cards product-viewed__grids swiper-wrapper" role="list"></ul>
+        <button type="button" class="swiper-button-prev" aria-label="Sản phẩm trước"></button>
+        <button type="button" class="swiper-button-next" aria-label="Sản phẩm tiếp theo"></button>
+      </div>
+    </div>
+  </product-viewed>
+</product-template>
+
+{%- include 'product-sticky-add' -%}
+{%- if settings.product_lightbox_enable -%}<product-lightbox class="product-lightbox"></product-lightbox>{%- endif -%}
+{%- include 'coupon-modal' -%}
+{%- if settings.product_size_guide_enable and settings.bed_product_size_guide_page != blank -%}{%- include 'size-guide-modal' -%}{%- endif -%}
