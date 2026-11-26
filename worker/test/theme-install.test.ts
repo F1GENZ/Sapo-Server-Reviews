@@ -237,7 +237,7 @@ const makeService = (opts: { role: string; failLiveOn?: string; aiLine?: number 
   const ai = {
     suggestInsertionLine: async (_s: string, input: { target: string; key: string; candidates?: string }) => {
       aiInputs.push(input);
-      return opts.aiLine ? { line: opts.aiLine, reason: 'test' } : null;
+      return opts.aiLine ? { line: opts.aiLine, reason: 'test' } : { rejected: 'test' };
     },
   };
   const fetched: string[] = [];
@@ -477,6 +477,14 @@ describe('ThemeInstallService fallbacks', () => {
     expect(result.warnings.some((w) => w.includes('Dán đoạn mã'))).toBe(true);
   });
 
+  it('names the AI rejection code in the plan instead of failing silently', async () => {
+    const ctx = makeService({ role: 'unpublished', files: new Map(stuck) });
+    const result = await ctx.service.plan(STORE, '1');
+    expect(result.edits.find((e) => e.target === 'widget')).toMatchObject({ status: 'skipped' });
+    expect(result.warnings.some((w) => w.includes('AI không đề xuất được vị trí cho widget') && w.includes('(no_safe_line)'))).toBe(true);
+    expect(result.warnings.some((w) => w.includes('AI không đề xuất được vị trí cho badge') && w.includes('(test)'))).toBe(true);
+  });
+
   it('asks the AI only with positions that pass the safety scan and snaps an off-by-one answer to a safe line', async () => {
     const layout = '<script>\nvar a = 1;\n</script>\n{{ content_for_layout }}\n<p>x</p>\n';
     const files = new Map([['layouts/theme.bwt', layout]]);
@@ -503,6 +511,10 @@ describe('parseInsertionAnswer', () => {
     ['JSON in a code fence', '```json\n{"line": 7, "reason": "x"}\n```', 7],
     ['a JSON object already parsed by Workers AI', { line: 30, reason: 'x' }, 30],
     ['a numeric string', '{"line": "15", "reason": "x"}', 15],
+    ['JSON broken by echoed liquid braces', '{"line": 2, "reason": "sau {% comment %}"}', 2],
+    ['JSON broken by quotes in the reason', '{"line": 4, "reason": "sau <div class="pdp">"}', 4],
+    ['prose without JSON but with a line number', 'Tôi chèn ngay sau dòng 7 nhé', 7],
+    ['prose with a bare line label', 'line: 9', 9],
   ])('accepts %s', (_name, answer, line) => {
     expect(parseInsertionAnswer(answer)).toMatchObject({ line });
   });
@@ -510,12 +522,16 @@ describe('parseInsertionAnswer', () => {
   it.each([
     ['not sure (0)', '{"line": 0}'],
     ['prose only', 'Tôi nghĩ nên chèn sau mô tả'],
-    ['broken JSON', '{"line": 12,'],
+    ['JSON without any line number', '{"reason": "không rõ"}'],
     ['negative', { line: -3 }],
     ['fraction', { line: 2.5 }],
     ['nothing', null],
   ])('rejects %s with a reason code', (_name, answer) => {
     expect(parseInsertionAnswer(answer)).toHaveProperty('rejected');
+  });
+
+  it('recovers the line number from truncated JSON instead of dropping the answer', () => {
+    expect(parseInsertionAnswer('{"line": 12,')).toMatchObject({ line: 12 });
   });
 });
 

@@ -51,12 +51,31 @@ const buildPrompt = (input: ReplySuggestionInput): string =>
 export const parseInsertionAnswer = (answer: unknown): { line: number; reason: string } | { rejected: string } => {
   let payload = answer;
   if (typeof payload === 'string') {
-    const json = /\{[\s\S]*\}/.exec(payload)?.[0];
-    if (!json) return { rejected: 'no_json' };
-    try {
-      payload = JSON.parse(json);
-    } catch {
-      return { rejected: 'invalid_json' };
+    const text = payload;
+    const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text)?.[1];
+    const narrow = /\{[^{}]*"line"[^{}]*\}/i.exec(text)?.[0];
+    let parsedObject: unknown = null;
+    for (const candidate of [fenced, narrow, /\{[\s\S]*\}/.exec(text)?.[0]]) {
+      if (!candidate) continue;
+      try {
+        const value = JSON.parse(candidate);
+        if (value && typeof value === 'object' && 'line' in (value as Record<string, unknown>)) {
+          parsedObject = value;
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+    if (parsedObject) {
+      payload = parsedObject;
+    } else {
+      const match =
+        /"line"\s*:\s*"?(\d+)"?/i.exec(text) ??
+        /\bline\b\s*[:=]?\s*(\d+)/i.exec(text) ??
+        /(?:dòng|dong)\s*(?:số\s*)?(\d+)/i.exec(text);
+      if (!match) return { rejected: 'no_json' };
+      payload = { line: Number(match[1]), reason: '' };
     }
   }
   if (!payload || typeof payload !== 'object') return { rejected: 'empty' };
@@ -151,14 +170,18 @@ export class AiService {
   async suggestInsertionLine(
     storeDomain: string,
     input: { target: 'loader' | 'widget' | 'badge'; key: string; numbered: string; candidates?: string },
-  ): Promise<{ line: number; reason: string } | null> {
-    if (!this.workersAi) return null;
-    await this.rateLimit.assertAllowed(
-      'ai:theme-anchor',
-      storeDomain,
-      AI_THEME_ANCHOR_RATE_WINDOW_SECONDS,
-      AI_THEME_ANCHOR_RATE_MAX,
-    );
+  ): Promise<{ line: number; reason: string } | { rejected: string }> {
+    if (!this.workersAi) return { rejected: 'not_configured' };
+    try {
+      await this.rateLimit.assertAllowed(
+        'ai:theme-anchor',
+        storeDomain,
+        AI_THEME_ANCHOR_RATE_WINDOW_SECONDS,
+        AI_THEME_ANCHOR_RATE_MAX,
+      );
+    } catch {
+      return { rejected: 'rate_limited' };
+    }
     const goal = {
       loader: 'chèn đoạn nạp CSS/JS toàn cục: ngay trước thẻ đóng </head> hoặc trước </body>',
       widget: 'chèn khối đánh giá sản phẩm: trong trang chi tiết sản phẩm, dưới phần mô tả/thông tin sản phẩm, trước khối sản phẩm liên quan hoặc footer',
@@ -195,14 +218,14 @@ export class AiService {
       const parsed = parseInsertionAnswer(answer);
       if ('rejected' in parsed) {
         this.logger.warn(`Workers AI theme anchor rejected for ${storeDomain} target=${input.target} key=${input.key}: ${parsed.rejected}`);
-        return null;
+        return parsed;
       }
       return parsed;
     } catch (error) {
       this.logger.warn(
         `Workers AI theme anchor failed for ${storeDomain}: ${error instanceof Error ? error.message : 'unknown error'}`,
       );
-      return null;
+      return { rejected: 'unavailable' };
     }
   }
 }

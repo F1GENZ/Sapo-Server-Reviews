@@ -394,24 +394,29 @@ export class ThemeInstallService {
     return { instruction, code: buildSnippet(target, { apiUrl: this.env.API_BASE_URL, storeDomain }).trim() };
   }
 
-  private async askAi(storeDomain: string, target: ThemeTargetKind, key: string, content: string): Promise<Anchor | null> {
+  private async askAi(
+    storeDomain: string,
+    target: ThemeTargetKind,
+    key: string,
+    content: string,
+  ): Promise<{ anchor: Anchor } | { rejected: string }> {
     try {
       const numbered = numberedLines(content);
       const shown = numbered === '' ? 0 : numbered.split('\n').length;
       const candidates = safeInsertionPoints(content, shown);
-      if (candidates.length === 0) return null;
+      if (candidates.length === 0) return { rejected: 'no_safe_line' };
       const suggestion = await this.ai.suggestInsertionLine(storeDomain, {
         target, key, numbered, candidates: formatLineRanges(candidates),
       });
-      if (!suggestion) return null;
+      if ('rejected' in suggestion) return suggestion;
       const line = nearestSafePoint(content, suggestion.line);
       if (line === null || !candidates.includes(line)) {
         this.logger.warn(`AI anchor rejected store=${storeDomain} target=${target} key=${key} line=${suggestion.line} reason=not_safe_point`);
-        return null;
+        return { rejected: `line_${suggestion.line}_not_safe` };
       }
-      return { beforeLine: line, reason: `AI đề xuất: ${suggestion.reason || 'vị trí phù hợp'}` };
+      return { anchor: { beforeLine: line, reason: `AI đề xuất: ${suggestion.reason || 'vị trí phù hợp'}` } };
     } catch {
-      return null;
+      return { rejected: 'error' };
     }
   }
 
@@ -465,6 +470,15 @@ export class ThemeInstallService {
       return true;
     };
 
+    const tryAi = async (target: ThemeTargetKind, key: string, content: string): Promise<Anchor | null> => {
+      const result = await this.askAi(storeDomain, target, key, content);
+      if ('rejected' in result) {
+        warnings.push(`AI không đề xuất được vị trí cho ${target} trong ${key} (${result.rejected}).`);
+        return null;
+      }
+      return result.anchor;
+    };
+
     const layouts = await readAll(keys.filter((k) => LAYOUT_KEY_RE.test(k)).sort((a, b) => Number(b.endsWith('theme.bwt')) - Number(a.endsWith('theme.bwt'))));
     const layout = layouts.find((l) => l.content.includes('content_for_layout')) ?? null;
     const loaderManual = this.manualFor('loader', 'Dán vào file layout của theme, ngay trước thẻ đóng </head>.', storeDomain);
@@ -474,7 +488,7 @@ export class ThemeInstallService {
       edits.push({ target: 'loader', file: hintLoader?.key ?? layout.key, status: 'present', reason: 'Theme đã nạp loader của F1GENZ Reviews (layout, snippet tùy biến hoặc HTML cửa hàng)' });
     } else {
       const rule = findLoaderAnchor(layout.content);
-      const anchor = rule ?? (await this.askAi(storeDomain, 'loader', layout.key, layout.content));
+      const anchor = rule ?? (await tryAi('loader', layout.key, layout.content));
       if (!anchor || !addInsert('loader', layout.key, layout.content, anchor, rule ? 'rule' : 'ai')) {
         edits.push({ target: 'loader', file: layout.key, status: 'skipped', reason: 'Không xác định được vị trí an toàn trong layout.', manual: loaderManual });
         warnings.push('Không tự gắn được loader vào layout. Dán đoạn mã ở mục Loader trước thẻ đóng </head> của layout.');
@@ -504,7 +518,7 @@ export class ThemeInstallService {
       }
       if (!done) {
         for (const f of sortBySizeDesc(productFiles).slice(0, 2)) {
-          const anchor = await this.askAi(storeDomain, 'widget', f.key, f.content);
+          const anchor = await tryAi('widget', f.key, f.content);
           if (anchor && addInsert('widget', f.key, f.content, anchor, 'ai')) {
             done = true;
             break;
@@ -562,7 +576,7 @@ export class ThemeInstallService {
       if (!anyAnchored) {
         const biggest = sortBySizeDesc(cardFiles)[0];
         const hidden = hideLegacyBadges(biggest.content);
-        const anchor = await this.askAi(storeDomain, 'badge', biggest.key, hidden.content);
+        const anchor = await tryAi('badge', biggest.key, hidden.content);
         if (anchor && addInsert('badge', biggest.key, hidden.content, anchor, 'ai', biggest.content)) {
           aiBadge = true;
           const idx = badgeSkips.findIndex((e) => e.file === biggest.key && e.status === 'skipped');
