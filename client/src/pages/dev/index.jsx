@@ -222,14 +222,13 @@ const buildManualSteps = (snippets) => [
   },
   {
     key: "slider",
-    label: <Text strong>5. Slider đánh giá nổi bật (tuỳ chọn)</Text>,
+    label: <Text strong>5. Slider đánh giá nổi bật (tự động)</Text>,
     children: (
-      <>
-        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          Dán dưới khối đánh giá. Bật dải và chọn 5-15 đánh giá tại <Text strong>Cấu hình → Hiển thị</Text>; thuộc tính <Text code>count</Text> chỉ là gợi ý.
-        </Paragraph>
-        <CodeBlock code={snippets.slider} />
-      </>
+      <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+        Không cần dán gì: script storefront tự gắn dải đánh giá ngay dưới khối đánh giá trên trang sản phẩm.
+        Bật/tắt và chọn 5-15 đánh giá tại <Text strong>Cấu hình → Hiển thị</Text>.
+        Chỉ dán tay <Text code>{"<f1genz-curated-slider>"}</Text> khi muốn đặt dải ở vị trí khác (trang chủ, bộ sưu tập); script sẽ không tự thêm nữa.
+      </Paragraph>
     ),
   },
   {

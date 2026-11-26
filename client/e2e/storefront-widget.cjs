@@ -304,6 +304,49 @@ async function main() {
       }
     });
 
+    await check("B9", "the curated slider mounts itself right after the reviews widget with no theme edit", async () => {
+      const api = publicApi();
+      const { context, page, tracked } = await open(api, {
+        file: "index.html",
+        ready: ".f1genz-sapo-review-slider__item",
+      });
+      try {
+        const count = await page.$$eval("f1genz-curated-slider", (nodes) => nodes.length);
+        assert.equal(count, 1, "exactly one slider element after injection");
+        const injected = await page.$eval("f1genz-curated-slider", (node) => ({
+          previousTag: node.previousElementSibling ? node.previousElementSibling.tagName.toLowerCase() : "",
+          owned: node.hasAttribute("data-f1genz-runtime-owned"),
+          productId: node.getAttribute("product-id"),
+        }));
+        assert.equal(injected.previousTag, "f1genz-reviews", "the slider sits right after the widget");
+        assert.ok(injected.owned, "the injected slider is runtime-owned so the observer never rescans it");
+        assert.equal(injected.productId, "1074668505", "the product id travels with the injection");
+        assert.equal(api.calls.sliderLists.length, 1, "the injected slider fetches the slider feed once");
+        assert.deepEqual(tracked.errors, []);
+      } finally {
+        await context.close();
+      }
+    });
+
+    await check("B10", "a slider pasted by hand is never duplicated or re-injected", async () => {
+      const api = publicApi();
+      const { context, page, tracked } = await open(api, {
+        file: "slider.html",
+        ready: ".f1genz-sapo-review-slider__item",
+      });
+      try {
+        await sleep(400);
+        const count = await page.$$eval("f1genz-curated-slider", (nodes) => nodes.length);
+        assert.equal(count, 1, "the hand-pasted slider stays the only one");
+        const owned = await page.$eval("f1genz-curated-slider", (node) => node.hasAttribute("data-f1genz-runtime-owned"));
+        assert.equal(owned, false, "the hand-pasted slider keeps its own identity");
+        assert.equal(api.calls.sliderLists.length, 1, "no double fetch");
+        assert.deepEqual(tracked.errors, []);
+      } finally {
+        await context.close();
+      }
+    });
+
     await check("B3", "theme snippets follow the .bwt dialect (include, only the escape filter, guarded scalar metafields)", async () => {
       const stripComments = (source) => source.replace(/\{%-?\s*comment\s*-?%\}[\s\S]*?\{%-?\s*endcomment\s*-?%\}/g, "");
       for (const file of [THEME_SNIPPET, THEME_SCHEMA]) {

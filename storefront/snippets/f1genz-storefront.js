@@ -2794,7 +2794,7 @@
     '[class~="quick-view-product"]',
   ].join(', ');
   const F1GENZ_ELEMENT_SELECTOR =
-    'f1genz-reviews-panel, f1genz-qna-panel, f1genz-reviews, f1genz-rating-badge, f1genz-product-schema';
+    'f1genz-reviews-panel, f1genz-qna-panel, f1genz-reviews, f1genz-rating-badge, f1genz-product-schema, f1genz-curated-slider';
   const F1GENZ_RUNTIME_OWNED_SELECTOR = '[data-f1genz-runtime-owned]';
 
   function normalizeNumericId(value) {
@@ -3024,12 +3024,38 @@
     return quickviews;
   }
 
+  function mountCuratedSlider(widget) {
+    if (!(widget instanceof Element)) return null;
+    if (widget.closest('[data-f1genz-runtime-owned]')) return null;
+    const parent = widget.parentElement;
+    if (!parent) return null;
+    for (let node = widget.nextElementSibling; node; node = node.nextElementSibling) {
+      if (node.matches('f1genz-curated-slider')) return null;
+      if (!node.matches(F1GENZ_RUNTIME_OWNED_SELECTOR)) break;
+    }
+    const slider = document.createElement('f1genz-curated-slider');
+    ['product-id', 'storeDomain', 'count'].forEach((name) => {
+      const value = widget.getAttribute(name);
+      if (value) slider.setAttribute(name, value);
+    });
+    slider.setAttribute('data-f1genz-runtime-owned', '');
+    parent.insertBefore(slider, widget.nextSibling);
+    return slider;
+  }
+
   function scan(root = document, options = {}) {
     const mounted = [];
     collectQuickviews(root).forEach((quickview) => {
       const badge = mountQuickview(quickview, options);
       if (badge) mounted.push(badge);
     });
+    if (!document.querySelector('f1genz-curated-slider:not([data-f1genz-runtime-owned])')) {
+      const scope = root instanceof Element ? root : document;
+      scope.querySelectorAll('f1genz-reviews').forEach((widget) => {
+        const slider = mountCuratedSlider(widget);
+        if (slider) mounted.push(slider);
+      });
+    }
     return mounted;
   }
 

@@ -1465,7 +1465,7 @@ const SettingsPage = () => {
               <Flex vertical gap={2}>
                 <Text strong style={{ fontSize: 13 }}>Dải đánh giá nổi bật (slider)</Text>
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  Hiển thị ở phần tử <Text code>{"<f1genz-curated-slider>"}</Text> nếu theme đã gắn phần tử này.
+                  Tự hiển thị ngay dưới khối đánh giá trên trang sản phẩm, không cần sửa theme. Nếu theme dán tay phần tử <Text code>{"<f1genz-curated-slider>"}</Text> ở vị trí khác thì dải hiện ở đúng chỗ đó.
                 </Text>
               </Flex>
               <SwitchRow

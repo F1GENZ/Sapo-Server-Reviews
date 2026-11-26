@@ -12,7 +12,7 @@ import {
   unhideLegacyBadges,
 } from '../src/core/theme-install/theme-analysis';
 import { ThemeInstallService } from '../src/core/theme-install/theme-install.service';
-
+import { buildSnippet, STOREFRONT_ASSET_VERSION } from '../src/core/theme-install/theme-templates';
 const LAYOUT = [
   '<!doctype html>',
   '<html>',
@@ -305,6 +305,14 @@ const makeService = (opts: { role: string; failLiveOn?: string; aiLine?: number 
   );
   return { service, files, log, fetched, aiInputs };
 };
+
+describe('STOREFRONT_ASSET_VERSION', () => {
+  it('pins the loader snippet to the versioned asset urls', () => {
+    const snippet = buildSnippet('loader', { apiUrl: 'https://api.example.dev', storeDomain: 'shop.mysapo.net' });
+    expect(snippet).toContain(`f1genz-storefront.js?v=${STOREFRONT_ASSET_VERSION.js}`);
+    expect(snippet).toContain(`f1genz-storefront.css?v=${STOREFRONT_ASSET_VERSION.css}`);
+  });
+});
 
 describe('ThemeInstallService', () => {
   it('plans loader, widget and badge inserts and writes nothing', async () => {
