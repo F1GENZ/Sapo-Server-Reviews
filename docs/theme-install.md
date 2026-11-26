@@ -20,7 +20,7 @@ A completed install callback (`flow: install`, including the scope re-authorizat
 | `GET /api/admin/theme-install/themes` | none | `[{ id, name, role, processing }]`, live theme first |
 | `POST /api/admin/theme-install/plan` | `{ themeId }` | `{ hash, edits[], warnings[] }`; writes nothing |
 | `POST /api/admin/theme-install/apply` | `{ themeId, planHash }` | `{ inserted, createdFiles, verification, warnings }`; `409 plan_changed` returns the fresh plan |
-| `POST /api/admin/theme-install/uninstall` | `{ themeId }` | `{ removedFrom, deletedFiles }` |
+| `POST /api/admin/theme-install/uninstall` | `{ themeId }` | `{ removedFrom, deletedFiles, keptFiles, notChecked }` |
 
 ## What gets written
 
@@ -61,7 +61,7 @@ What counts as already installed (`present`, left alone):
 
 An unpublished theme can be previewed: `https://{store}/?previewThemeId=<id>` answers `302` to the same path without the parameter and sets a cookie, and the storefront then renders that theme (measured 2026-11-26 on `f1genz-seafoods.mysapo.net`, theme `1033856`: the loader include that exists only in that theme appeared in the HTML). The Haravan `?themeid=`/`theme_id`/`preview_theme_id`/`theme` forms stay ignored. The card's `Xem trước` button uses it.
 
-A merchant who edits or replaces the theme later loses the includes; run the card again. `uninstall` removes only lines that are exactly our include tags and the three snippet files.
+A merchant who edits or replaces the theme later loses the includes; run the card again. `uninstall` reads **every** `.bwt` file of the theme (not just the ones the install wrote) and removes our include wherever it sits — whole line or inline inside markup — then unwraps hidden legacy badges. Snippet files are deleted only when the whole theme was read; past 160 `.bwt` files the sweep is skipped, the three snippets are kept, and the result reports `notChecked` and `keptFiles`, because deleting a snippet that some unseen file includes would leave a dangling include.
 
 ## Anchor coverage (measured 2026-11-13, dry-run on 17 Sapo themes, read-only)
 
@@ -110,6 +110,8 @@ Installed into the unpublished theme, then opened `/?previewThemeId=1033856` wit
 | legacy Sapo badge in the DOM | 0 elements — the hidden block never reaches the browser |
 | product page | `<f1genz-reviews>` visible below the price, tabs `Đánh giá / Hỏi đáp / Đánh giá sản phẩm (7)`, no Liquid error text |
 | uninstall, one pass | 8 files rewritten, 3 snippets deleted, all 8 files back to their baseline SHA-256 |
+| uninstall sweep | 137 `.bwt` files, under the 160-file cap, so the sweep runs and the snippets are deleted; the sweep costs 83 s (one asset GET per file, Sapo leaky bucket), inside the 120 s client timeout |
+| inline include | `removeIncludes` also strips an include that sits inside markup (unit-tested), so a hand-pasted inline include cannot outlive its snippet |
 
 ## Real-shop verification (2026-11-12)
 

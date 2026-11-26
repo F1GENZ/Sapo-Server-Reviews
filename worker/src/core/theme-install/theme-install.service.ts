@@ -49,6 +49,7 @@ const cardRank = (key: string): number => {
   return rank === -1 ? CARD_PRIORITY.length : rank;
 };
 const MAX_HINT_FILES = 12;
+const SWEEP_MAX_FILES = 160;
 const MAX_CHAIN_DEPTH = 2;
 const PRODUCT_ROOT_KEY = 'templates/product.bwt';
 const CHAIN_FOLLOW_RE = /(?:^|[-_])(?:product|pdp|prd|detail|tabs?|info|content|description)(?:$|[-_])/i;
@@ -303,30 +304,32 @@ export class ThemeInstallService {
     });
   }
 
-  async uninstall(storeDomain: string, themeId: string): Promise<{ themeId: string; removedFrom: string[]; deletedFiles: string[] }> {
+  async uninstall(
+    storeDomain: string,
+    themeId: string,
+  ): Promise<{ themeId: string; removedFrom: string[]; deletedFiles: string[]; keptFiles: string[]; notChecked: number }> {
     return this.withLock(storeDomain, async () => {
       const token = await this.sapo.resolveAccessToken(storeDomain);
       const theme = await this.requireTheme(storeDomain, token, themeId);
       const keys = (await this.sapoApi.listThemeAssets(storeDomain, token, themeId)).map((a) => a.key);
       const names = Object.values(SNIPPET_NAMES);
+      const ownSnippets = new Set((Object.keys(SNIPPET_NAMES) as ThemeTargetKind[]).map((kind) => snippetKey(kind)));
+      const sweepKeys = keys.filter((k) => k.endsWith('.bwt') && !ownSnippets.has(k));
+      const notChecked = Math.max(0, sweepKeys.length - SWEEP_MAX_FILES);
+      const candidates = notChecked > 0 ? [] : sweepKeys;
       const written: Array<{ key: string; original: string }> = [];
       const removedFrom: string[] = [];
       const read = this.reader(storeDomain, token, themeId);
-      const chainKeys = (await collectProductFiles(keys, read)).map((f) => f.key);
-      const candidates = [...new Set([
-        ...keys.filter((k) => LAYOUT_KEY_RE.test(k) || PRODUCT_KEY_RE.test(k) || CARD_KEY_RE.test(k)),
-        ...chainKeys,
-      ])];
       try {
-        for (const key of candidates) {
+        await parallel(candidates, 4, async (key) => {
           const original = (await read(key)) ?? '';
           const stripped = removeIncludes(original, names);
           const unhidden = unhideLegacyBadges(stripped.content);
-          if (stripped.removed === 0 && unhidden.restored === 0) continue;
+          if (stripped.removed === 0 && unhidden.restored === 0) return;
           await this.sapoApi.putThemeAsset(storeDomain, token, themeId, key, unhidden.content);
           written.push({ key, original });
           removedFrom.push(key);
-        }
+        });
         if (theme.role === 'main' && written.length > 0) {
           const verdict = await this.verifyLive(storeDomain, token, 'loader');
           if (!verdict.ok) throw new BadRequestException({ code: 'live_check_failed', message: 'Cửa hàng lỗi sau khi gỡ' });
@@ -340,14 +343,20 @@ export class ThemeInstallService {
         });
       }
       const deletedFiles: string[] = [];
-      for (const kind of Object.keys(SNIPPET_NAMES) as ThemeTargetKind[]) {
-        const key = snippetKey(kind);
-        if (keys.includes(key)) {
-          await this.sapoApi.deleteThemeAsset(storeDomain, token, themeId, key);
-          deletedFiles.push(key);
+      const keptFiles: string[] = [];
+      for (const key of ownSnippets) {
+        if (!keys.includes(key)) continue;
+        if (notChecked > 0) {
+          keptFiles.push(key);
+          continue;
         }
+        await this.sapoApi.deleteThemeAsset(storeDomain, token, themeId, key);
+        deletedFiles.push(key);
       }
-      return { themeId, removedFrom, deletedFiles };
+      if (notChecked > 0) {
+        this.logger.warn(`Uninstall kept snippets store=${storeDomain} theme=${themeId} unchecked=${notChecked}`);
+      }
+      return { themeId, removedFrom: removedFrom.sort(), deletedFiles, keptFiles, notChecked };
     });
   }
 

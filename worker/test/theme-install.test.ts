@@ -413,6 +413,37 @@ describe('ThemeInstallService', () => {
     for (const [key, value] of before) expect(files.get(key)).toBe(value);
   });
 
+  it('removes our include from a file the install never touched', async () => {
+    const { service, files } = makeService({ role: 'unpublished' });
+    files.set('templates/page.bwt', "<div>{% include 'f1genz-reviews-widget' %}</div>\n");
+    files.set('snippets/custom-landing.bwt', '{% include \'f1genz-reviews-loader\' %}\n<p>hi</p>\n');
+    await service.apply(STORE, '1', (await service.plan(STORE, '1')).hash);
+    const result = await service.uninstall(STORE, '1');
+    expect(result.removedFrom).toEqual(
+      expect.arrayContaining(['snippets/custom-landing.bwt', 'templates/page.bwt']),
+    );
+    expect(files.get('templates/page.bwt')).toBe('<div></div>\n');
+    expect(files.get('snippets/custom-landing.bwt')).toBe('<p>hi</p>\n');
+    expect(result.deletedFiles).toHaveLength(3);
+  });
+
+  it('keeps the snippet files when the theme is too large to prove no include remains', async () => {
+    const files = new Map<string, string>([
+      ['layouts/theme.bwt', LAYOUT],
+      ['templates/product.bwt', "{%- include 'product-snippet' -%}\n"],
+      ['snippets/product-snippet.bwt', PRODUCT_SNIPPET],
+      ['snippets/product-item.bwt', CARD],
+    ]);
+    for (let i = 0; i < 170; i += 1) files.set(`snippets/bulk-${i}.bwt`, '<div>{{ product.name }}</div>\n');
+    const { service } = makeService({ role: 'unpublished', files });
+    await service.apply(STORE, '1', (await service.plan(STORE, '1')).hash);
+    const result = await service.uninstall(STORE, '1');
+    expect(result.notChecked).toBeGreaterThan(0);
+    expect(result.deletedFiles).toEqual([]);
+    expect(result.keptFiles).toHaveLength(3);
+    expect(files.has('snippets/f1genz-reviews-loader.bwt')).toBe(true);
+  });
+
   it('refuses a second concurrent operation for the same store', async () => {
     const { service } = makeService({ role: 'unpublished' });
     const plan = await service.plan(STORE, '1');

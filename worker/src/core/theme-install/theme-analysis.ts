@@ -189,11 +189,12 @@ export const removeIncludes = (content: string, names: string[]): { content: str
   let next = content;
   let removed = 0;
   for (const name of names) {
-    const re = new RegExp(
-      `^[ \\t]*${includeRe(name).source}[ \\t]*\\r?\\n?`,
-      'gm',
-    );
-    next = next.replace(re, () => {
+    const wholeLine = new RegExp(`^[ \\t]*${includeRe(name).source}[ \\t]*\\r?\\n?`, 'gm');
+    next = next.replace(wholeLine, () => {
+      removed += 1;
+      return '';
+    });
+    next = next.replace(includeRe(name, 'g'), () => {
       removed += 1;
       return '';
     });
