@@ -322,6 +322,7 @@ describe('ThemeInstallService', () => {
     expect(inserts.map((e) => `${e.target}:${e.file}`).sort()).toEqual([
       'badge:snippets/product-item.bwt',
       'loader:layouts/theme.bwt',
+      'schema:snippets/product-snippet.bwt',
       'widget:snippets/product-snippet.bwt',
     ]);
     expect(plan.hash).toMatch(/^[a-f0-9]{64}$/);
@@ -335,10 +336,10 @@ describe('ThemeInstallService', () => {
     expect(result.verification.mode).toBe('readback');
     expect(fetched).toEqual([]);
     const snippetWrites = log.filter((l) => l.startsWith('put snippets/f1genz-'));
-    expect(snippetWrites).toHaveLength(3);
+    expect(snippetWrites).toHaveLength(4);
     expect(log.indexOf(snippetWrites[2])).toBeLessThan(log.indexOf('put layouts/theme.bwt'));
     expect(files.get('layouts/theme.bwt')).toContain("{% include 'f1genz-reviews-loader' %}\n</head>");
-    expect(files.get('snippets/product-snippet.bwt')).toContain("{% include 'f1genz-reviews-widget' %}");
+    expect(files.get('snippets/product-snippet.bwt')).toMatch(/include 'f1genz-reviews-widget' %\}\n\s*\{% include 'f1genz-product-schema' %\}/);
     expect(files.get('snippets/f1genz-reviews-loader.bwt')).toContain('<!-- f1genz:loader -->');
     const again = await service.plan(STORE, '1');
     expect(again.edits.every((e) => e.status !== 'insert')).toBe(true);
@@ -432,7 +433,7 @@ describe('ThemeInstallService', () => {
     );
     expect(files.get('templates/page.bwt')).toBe('<div></div>\n');
     expect(files.get('snippets/custom-landing.bwt')).toBe('<p>hi</p>\n');
-    expect(result.deletedFiles).toHaveLength(3);
+    expect(result.deletedFiles).toHaveLength(4);
   });
 
   it('keeps the snippet files when the theme is too large to prove no include remains', async () => {
@@ -448,7 +449,7 @@ describe('ThemeInstallService', () => {
     const result = await service.uninstall(STORE, '1');
     expect(result.notChecked).toBeGreaterThan(0);
     expect(result.deletedFiles).toEqual([]);
-    expect(result.keptFiles).toHaveLength(3);
+    expect(result.keptFiles).toHaveLength(4);
     expect(files.has('snippets/f1genz-reviews-loader.bwt')).toBe(true);
   });
 

@@ -15,6 +15,7 @@ import {
   hasInclude,
   hideLegacyBadges,
   includedSnippets,
+  includeRe,
   insertIncludeBefore,
   nearestSafePoint,
   numberedLines,
@@ -63,7 +64,7 @@ const LOADER_PRESENT_RE = /f1genz-storefront|__F1GENZ_STOREFRONT_CONFIG|include\
 const WIDGET_PRESENT_RE = /<f1genz-(?:reviews|qna)[\w-]*[\s>]/i;
 const BADGE_PRESENT_RE = /<f1genz-rating-badge[\s>]/i;
 const LEGACY_BADGE_TEXT_RE = /sapo-product-reviews-badge/i;
-const ORDER: Record<ThemeTargetKind, number> = { badge: 0, widget: 1, loader: 2 };
+const ORDER: Record<ThemeTargetKind, number> = { badge: 0, widget: 1, loader: 2, schema: 1 };
 
 export interface ThemeSummary {
   id: string;
@@ -98,6 +99,7 @@ interface Insertion {
   beforeLine: number | null;
   content: string;
   original: string;
+  extraInclude?: ThemeTargetKind;
 }
 
 interface InternalPlan extends ThemePlan {
@@ -243,7 +245,7 @@ export class ThemeInstallService {
       const warnings = [...plan.warnings];
       const live = plan.role === 'main';
       try {
-        const kinds = [...new Set(plan.insertions.map((i) => i.target))];
+        const kinds = [...new Set(plan.insertions.flatMap((i) => (i.extraInclude ? [i.target, i.extraInclude] : [i.target])))];
         await parallel(kinds, 3, async (kind) => {
           const key = snippetKey(kind);
           await this.sapoApi.putThemeAsset(
@@ -258,9 +260,14 @@ export class ThemeInstallService {
           if (!current || sha(current.value ?? '') !== sha(ins.original)) {
             throw new ConflictException({ code: 'theme_changed', message: `File ${ins.file} vừa được sửa trong lúc cài đặt` });
           }
-          const next = ins.beforeLine === null
+          let next = ins.beforeLine === null
             ? ins.content
             : insertIncludeBefore(ins.content, ins.beforeLine, SNIPPET_NAMES[ins.target]);
+          if (next !== null && ins.extraInclude) {
+            const follow = insertIncludeBefore(next, ins.beforeLine! + 1, SNIPPET_NAMES[ins.extraInclude]);
+            if (follow === null) throw new BadRequestException({ code: 'unsafe_anchor', message: `Vị trí chèn ${SNIPPET_NAMES[ins.extraInclude]} trong ${ins.file} không an toàn` });
+            next = follow;
+          }
           if (next === null) throw new BadRequestException({ code: 'unsafe_anchor', message: `Vị trí chèn trong ${ins.file} không an toàn` });
           await this.sapoApi.putThemeAsset(storeDomain, token, themeId, ins.file, next);
           written.push({ key: ins.file, original: ins.original });
@@ -268,16 +275,21 @@ export class ThemeInstallService {
         await parallel(ordered, 3, async (ins) => {
           const back = await this.sapoApi.getThemeAsset(storeDomain, token, themeId, ins.file);
           const backText = back?.value ?? '';
+          const stripNames = ins.extraInclude
+            ? [SNIPPET_NAMES[ins.target], SNIPPET_NAMES[ins.extraInclude]]
+            : [SNIPPET_NAMES[ins.target]];
           const plain = ins.beforeLine === null;
-          const restored = plain ? backText : removeIncludes(backText, [SNIPPET_NAMES[ins.target]]).content;
+          const restored = plain ? backText : removeIncludes(backText, stripNames).content;
           const readbackOk =
-            (plain || hasInclude(backText, SNIPPET_NAMES[ins.target])) &&
+            (plain ||
+              (hasInclude(backText, SNIPPET_NAMES[ins.target]) &&
+                (!ins.extraInclude || hasInclude(backText, SNIPPET_NAMES[ins.extraInclude])))) &&
             normalizeEol(restored) === normalizeEol(ins.content);
           checks.push({ name: `readback:${ins.file}`, ok: readbackOk, detail: readbackOk ? 'Đọc lại khớp bản gốc cộng một dòng include' : 'Nội dung đọc lại không khớp' });
           if (!readbackOk) throw new BadRequestException({ code: 'readback_mismatch', message: `Nội dung ${ins.file} sau khi ghi không khớp` });
         });
         if (live) {
-          await parallel(kinds, 3, async (kind) => {
+          await parallel(kinds.filter((k) => k !== 'schema'), 3, async (kind) => {
             const verdict = await this.verifyLive(storeDomain, token, kind);
             checks.push(...verdict.checks);
             warnings.push(...verdict.warnings);
@@ -623,6 +635,54 @@ export class ThemeInstallService {
         warnings.push(`Badge đánh giá cũ của Sapo trong ${untouchedLegacy.join(', ')} chiếm nhiều dòng nên chưa ẩn tự động được; gỡ tay để không hiện hai badge.`);
       }
       edits.push(...badgeSkips);
+    }
+
+    {
+      const schemaManual = this.manualFor('schema', 'Dán vào template trang sản phẩm, ngay sau dòng include của khối đánh giá.', storeDomain);
+      const schemaName = SNIPPET_NAMES.schema;
+      const widgetInsert = insertions.find((i) => i.target === 'widget');
+      if (widgetInsert) {
+        const widg = insertIncludeBefore(widgetInsert.content, widgetInsert.beforeLine!, SNIPPET_NAMES.widget);
+        const followed = widg === null ? null : insertIncludeBefore(widg, widgetInsert.beforeLine! + 1, schemaName);
+        if (followed !== null && removeIncludes(followed, [schemaName]).content === widg) {
+          widgetInsert.extraInclude = 'schema';
+          edits.push({
+            target: 'schema', file: widgetInsert.file, status: 'insert', source: 'rule',
+            reason: 'Sau dòng include của khối đánh giá (JSON-LD server-side cho SEO)',
+            afterLine: widgetInsert.beforeLine!,
+          });
+        } else {
+          edits.push({ target: 'schema', file: widgetInsert.file, status: 'skipped', reason: 'Vị trí sau khối đánh giá không vượt qua kiểm tra an toàn.', manual: schemaManual });
+        }
+      } else {
+        const widgetEdit = edits.find((e) => e.target === 'widget');
+        const presentKey = widgetEdit?.status === 'present' && widgetEdit.file ? widgetEdit.file : '';
+        const host = presentKey ? productFiles.find((f) => f.key === presentKey) : undefined;
+        const includeReWidget = new RegExp(`\\\\{%-?\\\\s*include\\\\s+['"]${SNIPPET_NAMES.widget}['"]\\\\s*-?%\\\\}`);
+        const schemaPresent = host && hasInclude(host.content, schemaName);
+        if (schemaPresent) {
+          edits.push({ target: 'schema', file: host!.key, status: 'present', reason: 'Trang sản phẩm đã có JSON-LD của F1GENZ' });
+        } else if (host && includeReWidget.test(host.content)) {
+          const lines = host.content.split('\n');
+          const includeIndex = lines.findIndex((line) => includeReWidget.test(line));
+          const followed = insertIncludeBefore(host.content, includeIndex + 1, schemaName);
+          if (followed !== null && removeIncludes(followed, [schemaName]).content === host.content) {
+            insertions.push({ target: 'schema', file: host.key, beforeLine: includeIndex + 1, content: host.content, original: host.content });
+            edits.push({
+              target: 'schema', file: host.key, status: 'insert', source: 'rule',
+              reason: 'Sau dòng include của khối đánh giá đang có sẵn (JSON-LD server-side cho SEO)',
+              afterLine: includeIndex + 1,
+            });
+          } else {
+            edits.push({ target: 'schema', file: host.key, status: 'skipped', reason: 'Vị trí sau khối đánh giá không vượt qua kiểm tra an toàn.', manual: schemaManual });
+          }
+        } else {
+          edits.push({
+            target: 'schema', file: '', status: 'skipped',
+            reason: 'Không có dòng include khối đánh giá trong theme để đặt JSON-LD kèm theo; script storefront vẫn tự dựng JSON-LD trên trình duyệt.',
+          });
+        }
+      }
     }
 
     if (theme.role === 'main') warnings.push('Theme đang xuất bản (live): thay đổi hiển thị ngay trên cửa hàng.');

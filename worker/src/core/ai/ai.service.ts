@@ -169,7 +169,7 @@ export class AiService {
 
   async suggestInsertionLine(
     storeDomain: string,
-    input: { target: 'loader' | 'widget' | 'badge'; key: string; numbered: string; candidates?: string },
+    input: { target: 'loader' | 'widget' | 'badge' | 'schema'; key: string; numbered: string; candidates?: string },
   ): Promise<{ line: number; reason: string } | { rejected: string }> {
     if (!this.workersAi) return { rejected: 'not_configured' };
     try {
@@ -186,6 +186,7 @@ export class AiService {
       loader: 'chèn đoạn nạp CSS/JS toàn cục: ngay trước thẻ đóng </head> hoặc trước </body>',
       widget: 'chèn khối đánh giá sản phẩm: trong trang chi tiết sản phẩm, dưới phần mô tả/thông tin sản phẩm, trước khối sản phẩm liên quan hoặc footer',
       badge: 'chèn huy hiệu số sao: ngay sau tiêu đề (h1-h6) chứa tên sản phẩm bên trong thẻ sản phẩm',
+      schema: 'chèn dòng include JSON-LD: ngay sau dòng include của khối đánh giá trong template sản phẩm',
     }[input.target];
     try {
       const result = await Promise.race([this.workersAi.run(this.model, {

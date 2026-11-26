@@ -1,9 +1,10 @@
-export type ThemeTargetKind = 'loader' | 'widget' | 'badge';
+export type ThemeTargetKind = 'loader' | 'widget' | 'badge' | 'schema';
 
 export const SNIPPET_NAMES: Record<ThemeTargetKind, string> = {
   loader: 'f1genz-reviews-loader',
   widget: 'f1genz-reviews-widget',
   badge: 'f1genz-rating-badge-card',
+  schema: 'f1genz-product-schema',
 };
 
 export const snippetKey = (kind: ThemeTargetKind): string => `snippets/${SNIPPET_NAMES[kind]}.bwt`;
@@ -166,7 +167,7 @@ export const isSafePoint = (content: string, beforeLine: number): boolean => {
   return state.blocks[state.blocks.length - 1] !== 'case';
 };
 
-const includeRe = (name: string, flags = ''): RegExp =>
+export const includeRe = (name: string, flags = ''): RegExp =>
   new RegExp(`\\{%-?\\s*include\\s+['"]${name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}['"]\\s*-?%\\}`, flags);
 
 export const hasInclude = (content: string, name: string): boolean => includeRe(name).test(content);

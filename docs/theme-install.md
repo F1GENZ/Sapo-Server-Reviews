@@ -29,8 +29,9 @@ A completed install callback (`flow: install`, including the scope re-authorizat
 | `loader` | the layout that contains `content_for_layout` | `{% include 'f1genz-reviews-loader' %}` before `</head>` (else before `</body>`) |
 | `widget` | the product page include chain (see Anchor coverage) | `{% include 'f1genz-reviews-widget' %}` at the best ranked position |
 | `badge` | `snippets/product-item*`, `product-card*`, `product-grid*` ... | `{% include 'f1genz-rating-badge-card' %}` right after the price block (else after the `product.name` heading, else before the price) |
+| `schema` | the same file as the widget include | `{% include 'f1genz-product-schema' %}` written in the same asset write, on the line right after the widget include; when the widget is `skipped` the schema is `skipped` too (the storefront script still mounts JSON-LD client-side, so SEO never goes entirely dark) |
 
-New snippet files: `snippets/f1genz-reviews-loader.bwt`, `f1genz-reviews-widget.bwt`, `f1genz-rating-badge-card.bwt`. Nothing else in the theme is changed, with one exception below.
+New snippet files: `snippets/f1genz-reviews-loader.bwt`, `f1genz-reviews-widget.bwt`, `f1genz-rating-badge-card.bwt`, `f1genz-product-schema.bwt`. Nothing else in the theme is changed, with one exception below.
 
 **Legacy badge.** A card line that is a self-contained legacy Sapo badge (an element whose class contains `sapo-product-reviews-badge`, or an include of it) is wrapped in a Liquid comment block:
 
@@ -61,7 +62,7 @@ What counts as already installed (`present`, left alone):
 
 An unpublished theme can be previewed: `https://{store}/?previewThemeId=<id>` answers `302` to the same path without the parameter and sets a cookie, and the storefront then renders that theme (measured 2026-11-26 on `f1genz-seafoods.mysapo.net`, theme `1033856`: the loader include that exists only in that theme appeared in the HTML). The Haravan `?themeid=`/`theme_id`/`preview_theme_id`/`theme` forms stay ignored. The card's `Xem trước` button uses it.
 
-A merchant who edits or replaces the theme later loses the includes; run the card again. `uninstall` reads **every** `.bwt` file of the theme (not just the ones the install wrote) and removes our include wherever it sits — whole line or inline inside markup — then unwraps hidden legacy badges. Snippet files are deleted only when the whole theme was read; past 160 `.bwt` files the sweep is skipped, the three snippets are kept, and the result reports `notChecked` and `keptFiles`, because deleting a snippet that some unseen file includes would leave a dangling include.
+A merchant who edits or replaces the theme later loses the includes; run the card again. `uninstall` reads **every** `.bwt` file of the theme (not just the ones the install wrote) and removes our include wherever it sits — whole line or inline inside markup — then unwraps hidden legacy badges. Snippet files are deleted only when the whole theme was read; past 160 `.bwt` files the sweep is skipped, the four snippets are kept, and the result reports `notChecked` and `keptFiles`, because deleting a snippet that some unseen file includes would leave a dangling include.
 
 ## Anchor coverage (measured 2026-11-13, dry-run on 17 Sapo themes, read-only)
 

@@ -210,12 +210,11 @@ const buildManualSteps = (snippets) => [
     children: (
       <>
         <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          Tạo <Text code>snippets/f1genz-product-schema.bwt</Text> với nội dung dưới, rồi chèn một dòng include trong template sản phẩm.
-          Snippet xuất <Text code>aggregateRating</Text> (từ metafield <Text code>f1genz_reviews</Text>, không có đánh giá thì không xuất) và <Text code>offers</Text> (giá VND, còn hàng/hết hàng).
+          Cài đặt tự động đã thêm luôn bước này. Nếu bạn dán tay: khối <Text strong>Cài vào theme</Text> ở trên đã tạo sẵn
+          file <Text code>snippets/f1genz-product-schema.bwt</Text>, chỉ cần thêm một dòng include vào template sản phẩm, ngay sau dòng include của khối đánh giá.
           Mỗi sản phẩm chỉ nên có một khối <Text code>aggregateRating</Text>: gỡ khối tương tự có sẵn trong theme.
-          Không dùng snippet thì script storefront tự dựng khối này; đặt <Text code>autoProductSchema: false</Text> trong cấu hình ở mục 1 để tắt.
+          Không dán thì script storefront tự dựng JSON-LD trên trình duyệt (crawler ít tin cậy hơn server-side).
         </Paragraph>
-        <CodeBlock code={snippets.schemaFile} />
         <CodeBlock code={snippets.schema} />
       </>
     ),
@@ -245,7 +244,7 @@ const buildManualSteps = (snippets) => [
         </Paragraph>
         <CodeBlock code={snippets.cardBadgeSsr} />
         <Paragraph type="secondary" style={{ margin: "12px 0 0" }}>
-          Không tạo được file snippet ở mục 4: dùng phần tử dưới, dựng JSON-LD trên trình duyệt. Chỉ dùng một trong hai cách để không có hai khối <Text code>aggregateRating</Text>.
+          Không muốn dùng snippet server-side ở mục 4: dùng phần tử dưới, dựng JSON-LD trên trình duyệt. Chỉ dùng một trong hai cách để không có hai khối <Text code>aggregateRating</Text>.
         </Paragraph>
         <CodeBlock code={snippets.schemaComponent} />
       </>

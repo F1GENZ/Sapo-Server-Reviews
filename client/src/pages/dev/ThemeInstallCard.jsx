@@ -20,6 +20,7 @@ const TARGET_LABEL = {
   loader: "Loader CSS/JS (layout)",
   widget: "Khối đánh giá (trang sản phẩm)",
   badge: "Badge số sao (thẻ sản phẩm)",
+  schema: "JSON-LD SEO (trang sản phẩm)",
 };
 
 const STATUS_TAG = {

@@ -14,4 +14,10 @@ for (const file of ['f1genz-storefront.js', 'f1genz-storefront.css']) {
     failed = 1;
   }
 }
+const schemaBwt = readFileSync(new URL('../../storefront/theme/f1genz-product-schema.bwt', import.meta.url), 'utf8');
+const embedded = /SCHEMA_SNIPPET_BODY = `([^`]*)`/.exec(templates);
+if (!embedded || embedded[1].trim() !== schemaBwt.trim()) {
+  console.error('SCHEMA_SNIPPET_BODY in worker/src/core/theme-install/theme-templates.ts no longer matches storefront/theme/f1genz-product-schema.bwt');
+  failed = 1;
+}
 process.exit(failed);
