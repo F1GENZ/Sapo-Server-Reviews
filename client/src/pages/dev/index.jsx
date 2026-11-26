@@ -197,7 +197,8 @@ const buildManualSteps = (snippets) => [
     children: (
       <>
         <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          Dán sau tiêu đề trong product card hoặc vòng lặp collection. Ở đây chỉ dùng badge, không dán <Text code>f1genz-reviews</Text>.
+          Dán ngay sau khối giá trong product card. Chỉ dùng badge, không dán <Text code>f1genz-reviews</Text>. Theme đang có badge
+          <Text code>sapo-product-reviews-badge</Text> thì gỡ hoặc bọc trong <Text code>{`{% comment %}`}</Text> để không hiện hai badge.
         </Paragraph>
         <CodeBlock code={snippets.cardBadge} />
       </>

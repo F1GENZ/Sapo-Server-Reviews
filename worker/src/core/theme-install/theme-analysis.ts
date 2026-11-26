@@ -306,11 +306,40 @@ export const findWidgetAnchor = (content: string): Anchor | null => findWidgetAn
 const HEADING_RE = /<h([1-6])\b[^>]*>[\s\S]{0,600}?\{\{\s*product\.(?:name|title)\b[\s\S]{0,300}?<\/h\1\s*>/gi;
 const TITLE_LINE_RE =
   /^\s*<([a-z][a-z0-9]*|\{\{[^}]*\}\})(?=[\s>])[^>]*class\s*=\s*["'][^"']*(?:title|name)[^"']*["'][^>]*>.*\{\{\s*product\.(?:name|title)\b.*<\/\1\s*>\s*$/i;
-const PRICE_LINE_RE = /^\s*<(?:div|p|span|ul)\b[^>]*class\s*=\s*["'][^"']*price[^"']*["'][^>]*>/i;
+const PRICE_LINE_RE = /^\s*<(div|p|span|ul)\b[^>]*class\s*=\s*["'][^"']*price[^"']*["'][^>]*>/i;
 
 const escapeRe = (value: string): string => value.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
 
+const priceEndLine = (content: string, line: number): number | null => {
+  const tag = PRICE_LINE_RE.exec(lineText(content, line))?.[1].toLowerCase();
+  if (!tag) return null;
+  if (/\/\s*>\s*$/.test(lineText(content, line))) return null;
+  const openRe = new RegExp(`<${escapeRe(tag)}(?=[\\s>/])`, 'gi');
+  const closeRe = new RegExp(`</${escapeRe(tag)}\\s*>`, 'gi');
+  let depth = 0;
+  let seenOpen = false;
+  for (let i = line; i < lineCount(content); i += 1) {
+    const text = lineText(content, i).replace(/\{%[\s\S]*?%\}|\{\{[\s\S]*?\}\}/g, '');
+    openRe.lastIndex = 0;
+    closeRe.lastIndex = 0;
+    depth += (text.match(openRe) ?? []).length;
+    if ((text.match(openRe) ?? []).length > 0) seenOpen = true;
+    depth -= (text.match(closeRe) ?? []).length;
+    if (seenOpen && depth <= 0) return i + 1;
+  }
+  return null;
+};
+
 export const findBadgeAnchor = (content: string): Anchor | null => {
+  if (!/\{\{[^}]*\bproduct\.(?:url|name|title|id)\b/.test(content)) return null;
+  const lines = lineCount(content);
+  for (let i = 0; i < lines; i += 1) {
+    if (!PRICE_LINE_RE.test(lineText(content, i))) continue;
+    const end = priceEndLine(content, i);
+    if (end === null) continue;
+    const anchor = checkedAnchor(content, end, 'Ngay sau khối giá trong thẻ sản phẩm');
+    if (anchor) return { ...anchor, rank: 0 };
+  }
   const starts = lineStarts(content);
   HEADING_RE.lastIndex = 0;
   let match = HEADING_RE.exec(content);
@@ -321,13 +350,12 @@ export const findBadgeAnchor = (content: string): Anchor | null => {
       const lineEnd = line + 1 < starts.length ? starts[line + 1] : content.length;
       if (content.slice(endOffset, lineEnd).trim() === '') {
         const anchor = checkedAnchor(content, line + 1, 'Ngay sau tiêu đề tên sản phẩm trong thẻ sản phẩm');
-        if (anchor) return { ...anchor, rank: 0 };
+        if (anchor) return { ...anchor, rank: 1 };
       }
     }
     HEADING_RE.lastIndex = match.index + 1;
     match = HEADING_RE.exec(content);
   }
-  const lines = lineCount(content);
   for (let i = 0; i < lines; i += 1) {
     const line = lineText(content, i);
     const tag = TITLE_LINE_RE.exec(line)?.[1];
@@ -336,15 +364,41 @@ export const findBadgeAnchor = (content: string): Anchor | null => {
     const closes = (line.match(new RegExp(`</${escapeRe(tag)}\\s*>`, 'gi')) ?? []).length;
     if (opens !== closes) continue;
     const anchor = checkedAnchor(content, i + 1, 'Ngay sau tiêu đề tên sản phẩm trong thẻ sản phẩm');
-    if (anchor) return { ...anchor, rank: 0 };
-  }
-  if (!/\{\{[^}]*\bproduct\.(?:url|name|title|id)\b/.test(content)) return null;
-  for (let i = 0; i < lines; i += 1) {
-    if (!PRICE_LINE_RE.test(lineText(content, i))) continue;
-    const anchor = checkedAnchor(content, i, 'Ngay trước khối giá (thẻ không có dòng tiêu đề đứng riêng)');
     if (anchor) return { ...anchor, rank: 1 };
   }
   return null;
+};
+
+const LEGACY_BADGE_LINE_RE =
+  /^[ \t]*(?:<[^<\n]*\bsapo-product-reviews-badge\b[^<\n]*(?:\/>|<\/[a-zA-Z][^>\n]*>)[ \t]*|\{%[^%\n]*\bsapo-product-reviews-badge\b[^%\n]*%\}[ \t]*)$/i;
+const HIDDEN_BADGE_OPEN = '{% comment %} f1genz-hide-legacy-badge';
+const HIDDEN_BADGE_CLOSE = '{% endcomment %}';
+const HIDDEN_BADGE_RE = /^[ \t]*\{% comment %\} f1genz-hide-legacy-badge\r?\n([\s\S]*?)^[ \t]*\{% endcomment %\}\r?\n?/gm;
+
+export const hideLegacyBadges = (content: string): { content: string; hidden: number } => {
+  const eol = content.includes('\r\n') ? '\r\n' : '\n';
+  const out: string[] = [];
+  let hidden = 0;
+  for (const raw of content.split(/(?<=\n)/)) {
+    const line = raw.replace(/\r?\n$/, '');
+    const tail = raw.slice(line.length);
+    if (LEGACY_BADGE_LINE_RE.test(line)) {
+      out.push(`${HIDDEN_BADGE_OPEN}${eol}${line}${eol}${HIDDEN_BADGE_CLOSE}${tail}`);
+      hidden += 1;
+      continue;
+    }
+    out.push(raw);
+  }
+  return { content: out.join(''), hidden };
+};
+
+export const unhideLegacyBadges = (content: string): { content: string; restored: number } => {
+  let restored = 0;
+  const next = content.replace(HIDDEN_BADGE_RE, (_match, inner: string) => {
+    restored += 1;
+    return inner;
+  });
+  return { content: next, restored };
 };
 
 export const numberedLines = (content: string, maxChars = 12000): string => {

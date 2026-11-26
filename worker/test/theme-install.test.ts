@@ -5,9 +5,11 @@ import {
   findWidgetAnchors,
   findLoaderAnchor,
   findWidgetAnchor,
+  hideLegacyBadges,
   insertIncludeBefore,
   isSafePoint,
   removeIncludes,
+  unhideLegacyBadges,
 } from '../src/core/theme-install/theme-analysis';
 import { ThemeInstallService } from '../src/core/theme-install/theme-install.service';
 
@@ -85,13 +87,13 @@ describe('theme-analysis', () => {
     expect(findWidgetAnchor(noReviews)?.beforeLine).toBe(3);
   });
 
-  it('anchors the badge after the heading with the product name, not the image alt', () => {
-    expect(findBadgeAnchor(CARD)?.beforeLine).toBe(3);
+  it('anchors the badge after the price block, not after the heading', () => {
+    expect(findBadgeAnchor(CARD)).toMatchObject({ beforeLine: 4, rank: 0, reason: 'Ngay sau khối giá trong thẻ sản phẩm' });
   });
 
   it('falls back to the price block when the heading shares its line with other markup', () => {
     const tight = CARD.replace('</a></h3>', '</a></h3></div>');
-    expect(findBadgeAnchor(tight)).toMatchObject({ beforeLine: 3, rank: 1 });
+    expect(findBadgeAnchor(tight)).toMatchObject({ beforeLine: 4, rank: 0 });
   });
 
   it('does not place a badge in a placeholder card that never references the product', () => {
@@ -99,7 +101,17 @@ describe('theme-analysis', () => {
     expect(findBadgeAnchor(demo)).toBeNull();
   });
 
-  it('anchors the badge after a title element whose tag name is a liquid variable', () => {
+  it('anchors the badge after a title element whose tag name is a liquid variable when no price block exists', () => {
+    const card = [
+      '<div class="card">',
+      "  <{{ heading | default: 'h3' }} class=\"card__title\"><a href=\"{{ product.url }}\">{{ product.name | escape }}</a></{{ heading | default: 'h3' }}>",
+      '</div>',
+      '',
+    ].join('\n');
+    expect(findBadgeAnchor(card)).toMatchObject({ beforeLine: 2, rank: 1 });
+  });
+
+  it('puts the badge after the price even when a title element sits above it', () => {
     const card = [
       '<div class="card">',
       "  <{{ heading | default: 'h3' }} class=\"card__title\"><a href=\"{{ product.url }}\">{{ product.name | escape }}</a></{{ heading | default: 'h3' }}>",
@@ -107,10 +119,10 @@ describe('theme-analysis', () => {
       '</div>',
       '',
     ].join('\n');
-    expect(findBadgeAnchor(card)).toMatchObject({ beforeLine: 2, rank: 0 });
+    expect(findBadgeAnchor(card)).toMatchObject({ beforeLine: 3, rank: 0 });
   });
 
-  it('anchors the badge after a one-line title element identified by its class, as in DefaultTheme', () => {
+  it('anchors the badge after the one-line price block identified by its class, as in DefaultTheme', () => {
     const grid = [
       '<div class="col-item">',
       '  <div class="item-title"> <a href="{{ product.url }}" title="{{ product.name }}">{{ product.name }} </a> </div>',
@@ -118,7 +130,7 @@ describe('theme-analysis', () => {
       '</div>',
       '',
     ].join('\n');
-    expect(findBadgeAnchor(grid)?.beforeLine).toBe(2);
+    expect(findBadgeAnchor(grid)).toMatchObject({ beforeLine: 3, rank: 0 });
   });
 
   it('refuses a class-title badge anchor when the element does not close on its own line', () => {
@@ -153,6 +165,28 @@ describe('theme-analysis', () => {
     expect(insertIncludeBefore(content, anchor?.beforeLine ?? -1, 'f1genz-reviews-widget')).toBe(
       "\t\t{%- include 'product-reviews' -%}\n\t\t{% include 'f1genz-reviews-widget' %}\n\n<div></div>\n",
     );
+  });
+
+  it('hides a legacy Sapo badge line inside a Liquid comment and restores it byte for byte', () => {
+    const card = [
+      '<div class="card">',
+      '  <div class="sapo-product-reviews-badge"></div>',
+      '  <div class="price">{{ product.price | money }}</div>',
+      '</div>',
+      '',
+    ].join('\n');
+    const hidden = hideLegacyBadges(card);
+    expect(hidden.hidden).toBe(1);
+    expect(hidden.content).toContain('{% comment %} f1genz-hide-legacy-badge\n  <div class="sapo-product-reviews-badge"></div>\n{% endcomment %}');
+    expect(unhideLegacyBadges(hidden.content).content).toBe(card);
+
+    const crlf = card.replace(/\n/g, '\r\n');
+    expect(unhideLegacyBadges(hideLegacyBadges(crlf).content).content).toBe(crlf);
+  });
+
+  it('leaves a multi-line legacy badge alone because commenting one line would break its markup', () => {
+    const card = ['<div class="sapo-product-reviews-badge">', '  <span>4.5</span>', '</div>', ''].join('\n');
+    expect(hideLegacyBadges(card)).toEqual({ content: card, hidden: 0 });
   });
 
   it('round-trips insert and remove byte for byte, including CRLF files', () => {
@@ -255,13 +289,20 @@ describe('ThemeInstallService', () => {
     expect(again.edits.every((e) => e.status !== 'insert')).toBe(true);
   });
 
-  it('treats an existing F1GENZ panel as an installed widget and warns about the legacy Sapo badge', async () => {
+  it('hides the legacy Sapo badge instead of stacking our badge next to it', async () => {
     const { service, files } = makeService({ role: 'unpublished' });
     files.set('snippets/product-snippet.bwt', `${PRODUCT_SNIPPET}<f1genz-reviews-panel product-id="{{ product.id }}"></f1genz-reviews-panel>\n`);
     files.set('snippets/product-item.bwt', CARD.replace('<div class="price">', '<div class="sapo-product-reviews-badge"></div>\n  <div class="price">'));
     const plan = await service.plan(STORE, '1');
     expect(plan.edits.find((e) => e.target === 'widget')).toMatchObject({ status: 'present', file: 'snippets/product-snippet.bwt' });
-    expect(plan.warnings.some((w) => w.includes('sapo-product-reviews-badge'))).toBe(true);
+    const badge = plan.edits.find((e) => e.target === 'badge');
+    expect(badge).toMatchObject({ status: 'insert', file: 'snippets/product-item.bwt' });
+    expect(badge?.reason).toContain('Ẩn 1 badge đánh giá cũ');
+    await service.apply(STORE, '1', plan.hash);
+    expect(files.get('snippets/product-item.bwt')).toContain('{% comment %} f1genz-hide-legacy-badge');
+    expect(files.get('snippets/product-item.bwt')).toContain("{% include 'f1genz-rating-badge-card' %}");
+    await service.uninstall(STORE, '1');
+    expect(files.get('snippets/product-item.bwt')).toBe(CARD.replace('<div class="price">', '<div class="sapo-product-reviews-badge"></div>\n  <div class="price">'));
   });
 
   it('skips the loader when a custom review snippet already loads F1GENZ', async () => {
@@ -292,10 +333,10 @@ describe('ThemeInstallService', () => {
     const plan = await service.plan(STORE, '1');
     const result = await service.apply(STORE, '1', plan.hash);
     expect(result.verification.mode).toBe('live');
-    expect(fetched.slice(-3)).toEqual([
-      `https://${STORE}/collections/all`,
-      `https://${STORE}/ao-thun`,
+    expect([...new Set(fetched.slice(-3))].sort()).toEqual([
       `https://${STORE}/`,
+      `https://${STORE}/ao-thun`,
+      `https://${STORE}/collections/all`,
     ]);
     expect(result.verification.checks.every((c) => c.ok)).toBe(true);
   });
@@ -369,9 +410,9 @@ describe('ThemeInstallService on real Sapo themes', () => {
     expect(plan.warnings.some((w) => w.includes('khối đánh giá cũ'))).toBe(true);
   });
 
-  it('Nau Atelier: badge after a title element with a variable tag name, widget before the related wrapper', async () => {
+  it('Nau Atelier: badge after the price block, widget before the related wrapper', async () => {
     const { edit } = await planOf('nau-atelier');
-    expect(edit('badge')[0]).toMatchObject({ status: 'insert', file: 'snippets/product-card.bwt', reason: 'Ngay sau tiêu đề tên sản phẩm trong thẻ sản phẩm' });
+    expect(edit('badge')[0]).toMatchObject({ status: 'insert', file: 'snippets/product-card.bwt', reason: 'Ngay sau khối giá trong thẻ sản phẩm' });
     expect(edit('widget')[0]).toMatchObject({ status: 'insert', file: 'templates/product.bwt' });
     expect(edit('widget')[0].preview?.after[0]).toContain('relate-wrap');
   });

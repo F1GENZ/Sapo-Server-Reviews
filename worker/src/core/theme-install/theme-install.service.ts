@@ -13,15 +13,16 @@ import {
   findWidgetAnchors,
   formatLineRanges,
   hasInclude,
+  hideLegacyBadges,
   includedSnippets,
   insertIncludeBefore,
-  lineCount,
   nearestSafePoint,
   numberedLines,
   removeIncludes,
   safeInsertionPoints,
   snippetKey,
   surroundingLines,
+  unhideLegacyBadges,
   type Anchor,
   type ThemeTargetKind,
 } from './theme-analysis';
@@ -59,7 +60,7 @@ export interface ThemeSummary {
 export interface PlannedEdit {
   target: ThemeTargetKind;
   file: string;
-  status: 'insert' | 'present' | 'skipped';
+  status: 'insert' | 'present' | 'skipped' | 'hide';
   source?: 'rule' | 'ai';
   reason: string;
   afterLine?: number;
@@ -79,8 +80,9 @@ export interface ThemePlan {
 interface Insertion {
   target: ThemeTargetKind;
   file: string;
-  beforeLine: number;
+  beforeLine: number | null;
   content: string;
+  original: string;
 }
 
 interface InternalPlan extends ThemePlan {
@@ -105,6 +107,18 @@ const normalizeEol = (value: string): string => value.replace(/\r\n/g, '\n');
 
 const sortBySizeDesc = (rows: Array<{ key: string; content: string }>) =>
   [...rows].sort((a, b) => b.content.length - a.content.length);
+
+const parallel = async <T>(items: T[], size: number, run: (item: T) => Promise<void>): Promise<void> => {
+  const queue = [...items];
+  const lanes = Array.from({ length: Math.min(size, Math.max(1, queue.length)) }, async () => {
+    let item = queue.shift();
+    while (item !== undefined) {
+      await run(item);
+      item = queue.shift();
+    }
+  });
+  await Promise.all(lanes);
+};
 
 const collectProductFiles = async (
   keys: string[],
@@ -140,6 +154,19 @@ const collectProductFiles = async (
     if (content !== null) out.push({ key, content });
   }
   return out;
+};
+
+const readMany = async (
+  keys: string[],
+  read: (key: string) => Promise<string | null>,
+  size = 4,
+): Promise<Array<{ key: string; content: string }>> => {
+  const rows: Array<{ key: string; content: string } | null> = new Array(keys.length).fill(null);
+  await parallel(keys.map((key, index) => ({ key, index })), size, async ({ key, index }) => {
+    const content = await read(key);
+    if (content !== null) rows[index] = { key, content };
+  });
+  return rows.filter((row): row is { key: string; content: string } => row !== null);
 };
 
 @Injectable()
@@ -184,7 +211,7 @@ export class ThemeInstallService {
           plan: this.toPublic(plan),
         });
       }
-      const inserted = plan.edits.filter((e) => e.status === 'insert');
+      const inserted = plan.edits.filter((e) => e.status === 'insert' || e.status === 'hide');
       if (plan.insertions.length === 0) {
         return {
           themeId,
@@ -202,40 +229,47 @@ export class ThemeInstallService {
       const live = plan.role === 'main';
       try {
         const kinds = [...new Set(plan.insertions.map((i) => i.target))];
-        for (const kind of kinds) {
+        await parallel(kinds, 3, async (kind) => {
           const key = snippetKey(kind);
           await this.sapoApi.putThemeAsset(
             storeDomain, token, themeId, key,
             buildSnippet(kind, { apiUrl: this.env.API_BASE_URL, storeDomain }),
           );
           created.push(key);
-        }
+        });
         const ordered = [...plan.insertions].sort((a, b) => ORDER[a.target] - ORDER[b.target]);
         for (const ins of ordered) {
           const current = await this.sapoApi.getThemeAsset(storeDomain, token, themeId, ins.file);
-          if (!current || sha(current.value ?? '') !== sha(ins.content)) {
+          if (!current || sha(current.value ?? '') !== sha(ins.original)) {
             throw new ConflictException({ code: 'theme_changed', message: `File ${ins.file} vừa được sửa trong lúc cài đặt` });
           }
-          const next = insertIncludeBefore(ins.content, ins.beforeLine, SNIPPET_NAMES[ins.target]);
+          const next = ins.beforeLine === null
+            ? ins.content
+            : insertIncludeBefore(ins.content, ins.beforeLine, SNIPPET_NAMES[ins.target]);
           if (next === null) throw new BadRequestException({ code: 'unsafe_anchor', message: `Vị trí chèn trong ${ins.file} không an toàn` });
           await this.sapoApi.putThemeAsset(storeDomain, token, themeId, ins.file, next);
-          written.push({ key: ins.file, original: ins.content });
-
+          written.push({ key: ins.file, original: ins.original });
+        }
+        await parallel(ordered, 3, async (ins) => {
           const back = await this.sapoApi.getThemeAsset(storeDomain, token, themeId, ins.file);
           const backText = back?.value ?? '';
-          const restored = removeIncludes(backText, [SNIPPET_NAMES[ins.target]]).content;
-          const readbackOk = hasInclude(backText, SNIPPET_NAMES[ins.target]) && normalizeEol(restored) === normalizeEol(ins.content);
+          const plain = ins.beforeLine === null;
+          const restored = plain ? backText : removeIncludes(backText, [SNIPPET_NAMES[ins.target]]).content;
+          const readbackOk =
+            (plain || hasInclude(backText, SNIPPET_NAMES[ins.target])) &&
+            normalizeEol(restored) === normalizeEol(ins.content);
           checks.push({ name: `readback:${ins.file}`, ok: readbackOk, detail: readbackOk ? 'Đọc lại khớp bản gốc cộng một dòng include' : 'Nội dung đọc lại không khớp' });
           if (!readbackOk) throw new BadRequestException({ code: 'readback_mismatch', message: `Nội dung ${ins.file} sau khi ghi không khớp` });
-
-          if (live) {
-            const verdict = await this.verifyLive(storeDomain, token, ins.target);
+        });
+        if (live) {
+          await parallel(kinds, 3, async (kind) => {
+            const verdict = await this.verifyLive(storeDomain, token, kind);
             checks.push(...verdict.checks);
             warnings.push(...verdict.warnings);
             if (!verdict.ok) {
-              throw new BadRequestException({ code: 'live_check_failed', message: `Cửa hàng lỗi sau khi sửa ${ins.file}` });
+              throw new BadRequestException({ code: 'live_check_failed', message: `Cửa hàng lỗi sau khi chèn ${kind}` });
             }
-          }
+          });
         }
       } catch (error) {
         const failures = await this.rollback(storeDomain, token, themeId, written, created);
@@ -272,9 +306,10 @@ export class ThemeInstallService {
       try {
         for (const key of candidates) {
           const original = (await read(key)) ?? '';
-          if (!names.some((n) => hasInclude(original, n))) continue;
-          const { content } = removeIncludes(original, names);
-          await this.sapoApi.putThemeAsset(storeDomain, token, themeId, key, content);
+          const stripped = removeIncludes(original, names);
+          const unhidden = unhideLegacyBadges(stripped.content);
+          if (stripped.removed === 0 && unhidden.restored === 0) continue;
+          await this.sapoApi.putThemeAsset(storeDomain, token, themeId, key, unhidden.content);
           written.push({ key, original });
           removedFrom.push(key);
         }
@@ -395,14 +430,7 @@ export class ThemeInstallService {
     const theme = await this.requireTheme(storeDomain, token, themeId);
     const keys = (await this.sapoApi.listThemeAssets(storeDomain, token, themeId)).map((a) => a.key);
     const read = this.reader(storeDomain, token, themeId);
-    const readAll = async (matching: string[]) => {
-      const rows: Array<{ key: string; content: string }> = [];
-      for (const key of matching) {
-        const content = await read(key);
-        if (content !== null) rows.push({ key, content });
-      }
-      return rows;
-    };
+    const readAll = (matching: string[]) => readMany(matching, read);
 
     const edits: PlannedEdit[] = [];
     const insertions: Insertion[] = [];
@@ -417,7 +445,14 @@ export class ThemeInstallService {
     const hintWidget = hintFiles.find((f) => WIDGET_PRESENT_RE.test(f.content)) ?? null;
     const live = theme.role === 'main' ? await this.liveSignals(storeDomain, token) : { loader: false, widget: false };
 
-    const addInsert = (target: ThemeTargetKind, file: string, content: string, anchor: Anchor, source: 'rule' | 'ai') => {
+    const addInsert = (
+      target: ThemeTargetKind,
+      file: string,
+      content: string,
+      anchor: Anchor,
+      source: 'rule' | 'ai',
+      original = content,
+    ) => {
       const next = insertIncludeBefore(content, anchor.beforeLine, SNIPPET_NAMES[target]);
       if (next === null || removeIncludes(next, [SNIPPET_NAMES[target]]).content !== content) return false;
       const around = surroundingLines(content, anchor.beforeLine);
@@ -425,7 +460,7 @@ export class ThemeInstallService {
         target, file, status: 'insert', source, reason: anchor.reason, afterLine: anchor.beforeLine,
         preview: { ...around, inserted: `{% include '${SNIPPET_NAMES[target]}' %}` },
       });
-      insertions.push({ target, file, beforeLine: anchor.beforeLine, content });
+      insertions.push({ target, file, beforeLine: anchor.beforeLine, content, original });
       if (source === 'ai') usedAi = true;
       return true;
     };
@@ -489,39 +524,54 @@ export class ThemeInstallService {
     }
 
     const cardFiles = await readAll(keys.filter((k) => CARD_KEY_RE.test(k)).slice(0, MAX_CARD_FILES));
-    const badgeManual = this.manualFor('badge', 'Dán vào snippet thẻ sản phẩm của theme, ngay sau tên sản phẩm.', storeDomain);
+    const badgeManual = this.manualFor('badge', 'Dán vào snippet thẻ sản phẩm, ngay sau khối giá.', storeDomain);
     if (cardFiles.length === 0) {
       edits.push({ target: 'badge', file: '', status: 'skipped', reason: 'Không tìm thấy snippet thẻ sản phẩm (product-item...).', manual: badgeManual });
     } else {
       const badgeSkips: PlannedEdit[] = [];
       let anyAnchored = false;
       for (const f of cardFiles) {
+        const hidden = hideLegacyBadges(f.content);
+        const legacy = hidden.hidden > 0;
         if (hasInclude(f.content, SNIPPET_NAMES.badge) || BADGE_PRESENT_RE.test(f.content)) {
-          edits.push({ target: 'badge', file: f.key, status: 'present', reason: 'Thẻ sản phẩm đã có badge F1GENZ' });
+          if (legacy) {
+            edits.push({ target: 'badge', file: f.key, status: 'hide', reason: `Ẩn ${hidden.hidden} badge đánh giá cũ của Sapo để không hiện trùng` });
+            insertions.push({ target: 'badge', file: f.key, beforeLine: null, content: hidden.content, original: f.content });
+          } else {
+            edits.push({ target: 'badge', file: f.key, status: 'present', reason: 'Thẻ sản phẩm đã có badge F1GENZ' });
+          }
           anyAnchored = true;
           continue;
         }
-        const anchor = findBadgeAnchor(f.content);
-        if (anchor && addInsert('badge', f.key, f.content, anchor, 'rule')) {
+        const anchor = findBadgeAnchor(hidden.content);
+        if (anchor && addInsert('badge', f.key, hidden.content, anchor, 'rule', f.content)) {
           anyAnchored = true;
-          const legacy = 'Thẻ sản phẩm đang có badge đánh giá cũ của Sapo (sapo-product-reviews-badge). Badge F1GENZ sẽ hiện cạnh nó; gỡ badge cũ nếu không muốn hiển thị cả hai.';
-          if (/sapo-product-reviews-badge/.test(f.content) && !warnings.includes(legacy)) warnings.push(legacy);
+          if (legacy) {
+            const idx = edits.findIndex((e) => e.target === 'badge' && e.file === f.key && e.status === 'insert');
+            if (idx !== -1) edits[idx].reason = `${anchor.reason}. Ẩn ${hidden.hidden} badge đánh giá cũ của Sapo`;
+          }
+        } else if (legacy) {
+          edits.push({ target: 'badge', file: f.key, status: 'hide', reason: `Ẩn ${hidden.hidden} badge đánh giá cũ của Sapo` });
+          insertions.push({ target: 'badge', file: f.key, beforeLine: null, content: hidden.content, original: f.content });
+          badgeSkips.push({ target: 'badge', file: f.key, status: 'skipped', reason: 'Không thấy khối giá hay tiêu đề đứng riêng trong thẻ này, nên không tự gắn badge.' });
         } else {
-          badgeSkips.push({ target: 'badge', file: f.key, status: 'skipped', reason: 'Không thấy dòng tiêu đề hay khối giá đứng riêng trong thẻ này, nên không tự gắn badge.' });
+          badgeSkips.push({ target: 'badge', file: f.key, status: 'skipped', reason: 'Không thấy khối giá hay tiêu đề đứng riêng trong thẻ này, nên không tự gắn badge.' });
         }
       }
       let aiBadge = false;
       if (!anyAnchored) {
         const biggest = sortBySizeDesc(cardFiles)[0];
-        const anchor = await this.askAi(storeDomain, 'badge', biggest.key, biggest.content);
-        if (anchor && addInsert('badge', biggest.key, biggest.content, anchor, 'ai')) {
+        const hidden = hideLegacyBadges(biggest.content);
+        const anchor = await this.askAi(storeDomain, 'badge', biggest.key, hidden.content);
+        if (anchor && addInsert('badge', biggest.key, hidden.content, anchor, 'ai', biggest.content)) {
           aiBadge = true;
-          const idx = badgeSkips.findIndex((e) => e.file === biggest.key);
+          const idx = badgeSkips.findIndex((e) => e.file === biggest.key && e.status === 'skipped');
           if (idx !== -1) badgeSkips.splice(idx, 1);
         }
       }
       if (!anyAnchored && !aiBadge && badgeSkips.length > 0) {
-        badgeSkips[0].manual = badgeManual;
+        const target = badgeSkips.find((e) => e.status === 'skipped') ?? badgeSkips[0];
+        target.manual = badgeManual;
         warnings.push('Không tự gắn được badge số sao vào thẻ sản phẩm. Dán đoạn mã ở mục Badge vào snippet thẻ sản phẩm của theme.');
       }
       edits.push(...badgeSkips);

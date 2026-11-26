@@ -28,9 +28,19 @@ A completed install callback (`flow: install`, including the scope re-authorizat
 |---|---|---|
 | `loader` | the layout that contains `content_for_layout` | `{% include 'f1genz-reviews-loader' %}` before `</head>` (else before `</body>`) |
 | `widget` | the product page include chain (see Anchor coverage) | `{% include 'f1genz-reviews-widget' %}` at the best ranked position |
-| `badge` | `snippets/product-item*`, `product-card*`, `product-grid*` ... | `{% include 'f1genz-rating-badge-card' %}` after the heading that holds `product.name`, else before the price block |
+| `badge` | `snippets/product-item*`, `product-card*`, `product-grid*` ... | `{% include 'f1genz-rating-badge-card' %}` right after the price block (else after the `product.name` heading, else before the price) |
 
-New snippet files: `snippets/f1genz-reviews-loader.bwt`, `f1genz-reviews-widget.bwt`, `f1genz-rating-badge-card.bwt`. Nothing else in the theme is changed.
+New snippet files: `snippets/f1genz-reviews-loader.bwt`, `f1genz-reviews-widget.bwt`, `f1genz-rating-badge-card.bwt`. Nothing else in the theme is changed, with one exception below.
+
+**Legacy badge.** A card line that is a self-contained legacy Sapo badge (an element whose class contains `sapo-product-reviews-badge`, or an include of it) is wrapped in a Liquid comment block:
+
+```
+{% comment %} f1genz-hide-legacy-badge
+  <div class="sapo-product-reviews-badge"></div>
+{% endcomment %}
+```
+
+It stops rendering, the surrounding markup is untouched, and `uninstall` unwraps the block so the file returns byte for byte. A badge whose markup spans several lines is left alone (commenting one line would break it) and nothing is hidden silently. The plan shows it as `status: hide` and the card as `Ẩn badge cũ`.
 
 What counts as already installed (`present`, left alone):
 
@@ -43,8 +53,8 @@ What counts as already installed (`present`, left alone):
 1. Insertion point must be plain HTML text: not inside a tag, `<script>`, `<style>`, `{% for %}`, `{% capture %}`, `{% comment %}`, `{% raw %}`, or between `{% case %}` and its first `{% when %}`.
 2. The inserted file minus our include line must equal the original byte for byte (CRLF preserved) before anything is written.
 3. Order of writes: new snippet files first (nothing includes them yet), then one include line per file, the loader last.
-4. Each write is read back and compared with the original plus one line.
-5. On the live theme (`role: main`) the storefront is fetched after every file: HTTP 200 and no Liquid error text. A missing marker is a warning only (Sapo cache).
+4. After the writes, every touched file is read back in parallel and compared with the original plus one line.
+5. On the live theme (`role: main`) the storefront is fetched once per touched target after all writes: HTTP 200 and no Liquid error text. A missing marker is a warning only (Sapo cache).
 6. Any failure restores every modified file from the in-request copy and deletes the new snippets. The result carries `code: install_rolled_back` and `cause`.
 7. `apply` recomputes the plan and requires the same `hash`; a changed theme or a different anchor returns `409 plan_changed`.
 8. One operation per store at a time (`lock:theme-install:{store}`, 180 s).
@@ -80,7 +90,7 @@ Widget position, best rule first (the first file in chain order wins a tie):
 | 3 | right before an element whose `class` or `id` says related, relate, recommend, upsell, cross-sell, recently or viewed; when that element sits directly inside an `{% if %}` (only blank or `assign` lines between), the point moves in front of the `{% if %}` so the widget is not hidden with the section |
 | 4 | end of the product template, only when every `div`, `section`, `main`, `article` and `aside` opened in the file is closed before that point (so the widget cannot land inside a wrapper the file leaves open); the plan warns about it. Otherwise the widget is `skipped` with the paste-by-hand code |
 
-Card badge position: after the one-line heading or the one-line `class="...title|name..."` element that holds `product.name` (the tag name may be a Liquid variable, as in `<{{ heading | default: 'h3' }}>`), else before the first price block, but only in a file that references `product.url`, `product.name`, `product.title` or `product.id` (placeholder cards are left alone).
+Card badge position: right after the price block (the closing line of the first element whose `class` contains `price`, counted through nested tags), else after the one-line heading or the one-line `class="...title|name..."` element that holds `product.name` (the tag name may be a Liquid variable, as in `<{{ heading | default: 'h3' }}>`). Only files that reference `product.url`, `product.name`, `product.title` or `product.id` are touched (placeholder cards are left alone). A self-contained legacy Sapo badge line is hidden in the same write; it is not counted as a badge position.
 
 When no rule gives a safe point, the target is `skipped` with a `manual` field: where to paste and the exact code. The card shows it with a copy button and a `Dán tay` tag; the plan warning names the target. Nothing is skipped silently.
 

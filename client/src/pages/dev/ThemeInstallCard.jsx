@@ -25,6 +25,7 @@ const TARGET_LABEL = {
 const STATUS_TAG = {
   insert: { color: "green", text: "Sẽ chèn" },
   present: { color: "blue", text: "Đã có" },
+  hide: { color: "orange", text: "Ẩn badge cũ" },
   skipped: { color: "default", text: "Bỏ qua" },
 };
 
@@ -144,7 +145,7 @@ const ThemeInstallCard = () => {
     navigateTopLevel(`/api/oauth/install/start?storeDomain=${encodeURIComponent(storeDomain || "")}`);
 
   const needsScope = errorCode(themesQuery.error) === "theme_scope_missing";
-  const inserts = plan?.edits.filter((e) => e.status === "insert") ?? [];
+  const inserts = plan?.edits.filter((e) => e.status === "insert" || e.status === "hide") ?? [];
   const isLive = plan?.role === "main";
   const previewStore = parseStoreDomainInput(storeDomain);
   const previewUrl =
@@ -161,7 +162,7 @@ const ThemeInstallCard = () => {
         <Text strong>Cài tự động vào theme</Text>
       </Flex>
       <Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        Hệ thống tự tìm vị trí gắn loader, khối đánh giá và badge số sao, cho bạn xem trước từng thay đổi rồi mới ghi. Mặc định chọn theme chưa xuất bản để bạn xem thử trước khi áp dụng cho cửa hàng thật. Có thể gỡ lại bất cứ lúc nào.
+        Tự gắn loader, khối đánh giá và badge số sao (ngay sau khối giá), ẩn badge đánh giá cũ của Sapo. Xem trước từng thay đổi rồi mới ghi; gỡ lại bất cứ lúc nào.
       </Paragraph>
 
       {needsScope ? (
@@ -242,7 +243,7 @@ const ThemeInstallCard = () => {
           style={{ marginTop: 12 }}
           type="success"
           showIcon
-          message={`Đã chèn ${lastResult.inserted.length} vị trí (${lastResult.verification.mode === "live" ? "đã kiểm tra trên cửa hàng" : "đã đọc lại để đối chiếu"})`}
+          message={`Đã áp dụng ${lastResult.inserted.length} thay đổi (${lastResult.verification.mode === "live" ? "đã kiểm tra trên cửa hàng" : "đã đọc lại để đối chiếu"})`}
           action={
             previewUrl ? (
               <Button size="small" type="primary" href={previewUrl} target="_blank" rel="noopener noreferrer">
