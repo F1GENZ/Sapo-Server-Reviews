@@ -189,6 +189,53 @@ describe('theme-analysis', () => {
     expect(hideLegacyBadges(card)).toEqual({ content: card, hidden: 0 });
   });
 
+  it('restores a file that holds both our include and a hidden legacy badge', () => {
+    const before = [
+      '<div class="card">',
+      '\t\t\t<div class="sapo-product-reviews-badge" data-id="{{ product.id }}"></div>',
+      '\t\t\t<div class="price">{{ product.price | money }}</div>',
+      '\t\t</div>',
+      '',
+    ].join('\n');
+    const hidden = hideLegacyBadges(before);
+    const anchor = findBadgeAnchor(hidden.content);
+    const withInclude = insertIncludeBefore(hidden.content, anchor?.beforeLine ?? -1, 'f1genz-rating-badge-card');
+    const stripped = removeIncludes(withInclude as string, ['f1genz-rating-badge-card']);
+    const restored = unhideLegacyBadges(stripped.content);
+    expect(stripped.removed).toBe(1);
+    expect(restored.restored).toBe(1);
+    expect(restored.content).toBe(before);
+  });
+
+  it('hides a legacy badge once, no matter how often the install runs', () => {
+    const card = [
+      '<div class="card">',
+      '\t\t\t<div class="sapo-product-reviews-badge" data-id="{{ product.id }}"></div>',
+      '\t\t\t<div class="price">{{ product.price | money }}</div>',
+      '\t\t</div>',
+      '',
+    ].join('\n');
+    const once = hideLegacyBadges(card);
+    const twice = hideLegacyBadges(once.content);
+    expect(twice.hidden).toBe(0);
+    expect(twice.content).toBe(once.content);
+    expect(unhideLegacyBadges(twice.content).content).toBe(card);
+  });
+
+  it('restores a legacy badge hidden twice by an older install', () => {
+    const card = [
+      '<div class="card">',
+      '\t\t\t<div class="sapo-product-reviews-badge" data-id="{{ product.id }}"></div>',
+      '\t\t</div>',
+      '',
+    ].join('\n');
+    const legacyLine = '\t\t\t<div class="sapo-product-reviews-badge" data-id="{{ product.id }}"></div>';
+    const nested = `<div class="card">\n{% comment %} f1genz-hide-legacy-badge\n{% comment %} f1genz-hide-legacy-badge\n${legacyLine}\n{% endcomment %}\n{% endcomment %}\n\t\t</div>\n`;
+    const restored = unhideLegacyBadges(`${nested}${''}`);
+    expect(restored.content).toBe(card);
+    expect(restored.restored).toBeGreaterThan(0);
+  });
+
   it('round-trips insert and remove byte for byte, including CRLF files', () => {
     const crlf = LAYOUT.replace(/\n/g, '\r\n');
     const next = insertIncludeBefore(crlf, 4, 'f1genz-reviews-loader');
@@ -475,6 +522,28 @@ describe('ThemeInstallService fallbacks', () => {
     expect(badge).toMatchObject({ status: 'skipped' });
     expect(badge?.manual?.code).toContain('<f1genz-rating-badge');
     expect(result.warnings.some((w) => w.includes('Dán đoạn mã'))).toBe(true);
+  });
+
+  it('examines product-item.bwt even when the asset list puts it after many other card files', async () => {
+    const files = new Map(Object.entries({
+      'layouts/theme.bwt': LAYOUT,
+      'templates/product.bwt': "{%- include 'product-snippet' -%}\n",
+      'snippets/product-snippet.bwt': PRODUCT_SNIPPET,
+      'snippets/product-card-demo.bwt': CARD,
+      'snippets/product-card-variant.bwt': CARD,
+      'snippets/product-card-list.bwt': CARD,
+      'snippets/product-grid-item.bwt': CARD,
+      'snippets/product-grid-list.bwt': CARD,
+      'snippets/product-item-action.bwt': CARD,
+      'snippets/product-item-compare.bwt': CARD,
+      'snippets/product-item-small.bwt': CARD,
+      'snippets/product-item-special.bwt': CARD,
+      'snippets/product-item.bwt': CARD,
+    }));
+    const { service } = makeService({ role: 'unpublished', files });
+    const plan = await service.plan(STORE, '1');
+    const badgeFiles = plan.edits.filter((e) => e.target === 'badge').map((e) => e.file);
+    expect(badgeFiles).toContain('snippets/product-item.bwt');
   });
 
   it('warns instead of staying silent when a legacy badge spans several lines', async () => {

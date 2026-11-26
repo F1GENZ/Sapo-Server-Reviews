@@ -379,9 +379,20 @@ export const hideLegacyBadges = (content: string): { content: string; hidden: nu
   const eol = content.includes('\r\n') ? '\r\n' : '\n';
   const out: string[] = [];
   let hidden = 0;
+  let inBlock = false;
   for (const raw of content.split(/(?<=\n)/)) {
     const line = raw.replace(/\r?\n$/, '');
     const tail = raw.slice(line.length);
+    if (inBlock) {
+      out.push(raw);
+      if (/^[ \t]*\{%\s*endcomment\s*%\}[ \t]*$/.test(line)) inBlock = false;
+      continue;
+    }
+    if (line.trim() === HIDDEN_BADGE_OPEN.trim()) {
+      inBlock = true;
+      out.push(raw);
+      continue;
+    }
     if (LEGACY_BADGE_LINE_RE.test(line)) {
       out.push(`${HIDDEN_BADGE_OPEN}${eol}${line}${eol}${HIDDEN_BADGE_CLOSE}${tail}`);
       hidden += 1;
@@ -394,10 +405,16 @@ export const hideLegacyBadges = (content: string): { content: string; hidden: nu
 
 export const unhideLegacyBadges = (content: string): { content: string; restored: number } => {
   let restored = 0;
-  const next = content.replace(HIDDEN_BADGE_RE, (_match, inner: string) => {
-    restored += 1;
-    return inner;
-  });
+  let next = content;
+  for (let pass = 0; pass < 5; pass += 1) {
+    let changed = false;
+    next = next.replace(HIDDEN_BADGE_RE, (_match, inner: string) => {
+      changed = true;
+      restored += 1;
+      return inner;
+    });
+    if (!changed) break;
+  }
   return { content: next, restored };
 };
 

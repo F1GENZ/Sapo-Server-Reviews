@@ -59,7 +59,7 @@ What counts as already installed (`present`, left alone):
 7. `apply` recomputes the plan and requires the same `hash`; a changed theme or a different anchor returns `409 plan_changed`.
 8. One operation per store at a time (`lock:theme-install:{store}`, 180 s).
 
-Sapo has no theme preview URL (the Haravan `?themeid=` form, `theme_id`, `preview_theme_id` and `theme` were all ignored on a storefront), so a theme that is not live is verified by read-back only.
+An unpublished theme can be previewed: `https://{store}/?previewThemeId=<id>` answers `302` to the same path without the parameter and sets a cookie, and the storefront then renders that theme (measured 2026-11-26 on `f1genz-seafoods.mysapo.net`, theme `1033856`: the loader include that exists only in that theme appeared in the HTML). The Haravan `?themeid=`/`theme_id`/`preview_theme_id`/`theme` forms stay ignored. The card's `Xem trước` button uses it.
 
 A merchant who edits or replaces the theme later loses the includes; run the card again. `uninstall` removes only lines that are exactly our include tags and the three snippet files.
 
@@ -90,13 +90,26 @@ Widget position, best rule first (the first file in chain order wins a tie):
 | 3 | right before an element whose `class` or `id` says related, relate, recommend, upsell, cross-sell, recently or viewed; when that element sits directly inside an `{% if %}` (only blank or `assign` lines between), the point moves in front of the `{% if %}` so the widget is not hidden with the section |
 | 4 | end of the product template, only when every `div`, `section`, `main`, `article` and `aside` opened in the file is closed before that point (so the widget cannot land inside a wrapper the file leaves open); the plan warns about it. Otherwise the widget is `skipped` with the paste-by-hand code |
 
-Card badge position: right after the price block (the closing line of the first element whose `class` contains `price`, counted through nested tags), else after the one-line heading or the one-line `class="...title|name..."` element that holds `product.name` (the tag name may be a Liquid variable, as in `<{{ heading | default: 'h3' }}>`). Only files that reference `product.url`, `product.name`, `product.title` or `product.id` are touched (placeholder cards are left alone). A self-contained legacy Sapo badge line is hidden in the same write; it is not counted as a badge position.
+Card badge position: right after the price block (the closing line of the first element whose `class` contains `price`, counted through nested tags), else after the one-line heading or the one-line `class="...title|name..."` element that holds `product.name` (the tag name may be a Liquid variable, as in `<{{ heading | default: 'h3' }}>`). Only files that reference `product.url`, `product.name`, `product.title` or `product.id` are touched (placeholder cards are left alone). A self-contained legacy Sapo badge line is hidden in the same write, once — a second install never nests a second comment block around it; it is not counted as a badge position. At most 12 card files are read, and the plain names (`product-item`, `product-card`, `product-grid-item`, `item-product`, `product-box`, `product-loop`, `product-thumb`) are read before the variants, so the file that actually renders the card is never the one cut by the limit (measured defect 2026-11-26: `snippets/product-item.bwt` sat after eight `product-item-*`/`product-card-*` keys and the badge landed everywhere but the collection grid).
 
 When no rule gives a safe point, the target is `skipped` with a `manual` field: where to paste and the exact code. The card shows it with a copy button and a `Dán tay` tag; the plan warning names the target. Nothing is skipped silently.
 
 Workers AI is asked only when no rule produced an anchor. The prompt carries the exact list of valid line numbers (from the safety scan) and the answer is parsed whether Workers AI returns text, a code-fenced JSON, an already parsed object, a numeric string, truncated JSON or prose that names a line (`parseInsertionAnswer`); a line that is off by up to 2 is snapped to the nearest valid point. Every rejection is now named in the plan as `AI không đề xuất được vị trí cho <target> trong <file> (<code>)`, with the codes `not_configured`, `rate_limited`, `no_safe_line`, `no_json`, `empty`, `line_invalid`, `unavailable` and `line_<n>_not_safe`.
 
 Measured on production 2026-11-26 (worker `5f9a1378`, store `f1genz-seafoods.mysapo.net`, an unpublished theme copy whose product template was temporarily reduced to a rule-less stub, then restored byte for byte): before the parser fix 6/6 plans reported `invalid_json` because the model echoed the file's Liquid braces into its JSON; after the fix 4/4 plans returned the same anchor, apply wrote `{% include 'f1genz-reviews-widget' %}` on the line the model chose, readback matched, and `uninstall` removed it. A rule-less template is the only condition that reaches this path on the measured corpus, so a normal theme never pays the AI latency.
+
+## Storefront render (2026-11-26, worker `b0b52388`, theme `1033856`)
+
+Installed into the unpublished theme, then opened `/?previewThemeId=1033856` with the shop's own cookie session:
+
+| Measure | Result |
+|---|---|
+| `/collections/all` badges | 12 `f1genz-rating-badge` elements, all with a non-zero box |
+| badge text for the rated product (`44284145`) | `(7 đánh giá)`, 5 star nodes rendered |
+| badge position | `previousElementSibling` is `.product-item-detail-price`; badge top 1263 vs price bottom 1261 |
+| legacy Sapo badge in the DOM | 0 elements — the hidden block never reaches the browser |
+| product page | `<f1genz-reviews>` visible below the price, tabs `Đánh giá / Hỏi đáp / Đánh giá sản phẩm (7)`, no Liquid error text |
+| uninstall, one pass | 8 files rewritten, 3 snippets deleted, all 8 files back to their baseline SHA-256 |
 
 ## Real-shop verification (2026-11-12)
 

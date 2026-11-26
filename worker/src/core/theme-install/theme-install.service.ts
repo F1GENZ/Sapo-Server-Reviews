@@ -34,7 +34,20 @@ const PRODUCT_KEY_RE =
 const CARD_KEY_RE =
   /^snippets\/(?:product-item|product-card|product-grid|product-loop|item-product|product-box|product-thumb)[^/]*\.bwt$/;
 const MAX_PRODUCT_FILES = 8;
-const MAX_CARD_FILES = 8;
+const MAX_CARD_FILES = 12;
+const CARD_PRIORITY = [
+  'snippets/product-item.bwt',
+  'snippets/product-card.bwt',
+  'snippets/product-grid-item.bwt',
+  'snippets/item-product.bwt',
+  'snippets/product-box.bwt',
+  'snippets/product-loop.bwt',
+  'snippets/product-thumb.bwt',
+];
+const cardRank = (key: string): number => {
+  const rank = CARD_PRIORITY.indexOf(key);
+  return rank === -1 ? CARD_PRIORITY.length : rank;
+};
 const MAX_HINT_FILES = 12;
 const MAX_CHAIN_DEPTH = 2;
 const PRODUCT_ROOT_KEY = 'templates/product.bwt';
@@ -538,7 +551,13 @@ export class ThemeInstallService {
       }
     }
 
-    const cardFiles = await readAll(keys.filter((k) => CARD_KEY_RE.test(k)).slice(0, MAX_CARD_FILES));
+    const cardFiles = await readAll(
+      keys
+        .filter((k) => CARD_KEY_RE.test(k))
+        .slice()
+        .sort((a, b) => cardRank(a) - cardRank(b))
+        .slice(0, MAX_CARD_FILES),
+    );
     const badgeManual = this.manualFor('badge', 'Dán vào snippet thẻ sản phẩm, ngay sau khối giá.', storeDomain);
     if (cardFiles.length === 0) {
       edits.push({ target: 'badge', file: '', status: 'skipped', reason: 'Không tìm thấy snippet thẻ sản phẩm (product-item...).', manual: badgeManual });
