@@ -124,3 +124,23 @@ Còn mở, cần chủ app quyết định trước khi bấm "Đăng ứng dụ
 - Mô tả đầy đủ đã được cập nhật (`docs/listing-assets/full-description.html`, 11.415 ký tự sau khi lưu, 75/75 `style` còn nguyên, có bước "Cài vào giao diện" và dòng quyền "Giao diện"), lưu bằng nút **Lưu** (`button.ui-context-bar__actions-primary`) sau khi `CKEDITOR.instances.FullDescription.filter.disable()`; đọc lại sau khi tải lại trang vẫn thấy nội dung mới, `jQuery(form).valid()` = `true`. Các trường khác giữ nguyên: Danh mục Hỗ trợ bán hàng, email `support@f1genz.com`, mô tả ngắn 128, MetaTitle 62, MetaDescription 140, 3 lợi điểm, 2 banner (310x100, 970x380) và **4 ảnh chụp 1600x910** đã có trên server, `PricingType` = 3 (theo kỳ hạn), `Period` = 1, `Price` = 119000, `TrialDays` = 0, `YoutubeUrl` trống.
 - So văn bản: bản lưu chỉ khác bản nguồn ở chỗ giải mã entity (`&#9733;` → `★`, `&ldquo;` → `“`) — không mất câu nào.
 - **Chưa bấm "Đăng ứng dụng"** (nộp lại hồ sơ để Sapo duyệt) — chờ chủ app quyết, và nên có lý do chặn trước khi nộp lại.
+
+## 7ter. Lý do chặn: không có ở bất kỳ bề mặt nào đọc được; đã nộp lại ngày 2026-11-26
+
+Đã dò hết chỗ lấy được:
+
+| Nguồn | Kết quả |
+|---|---|
+| `…/api_clients/detail/3833` | Chỉ badge "Bị chặn"; không có khối lý do, không tooltip |
+| `…/detail/3833.json`, `…/3833.json`, `/api/service/partners/api_clients/3833` | 404 (trang render phía server, không có API JSON) |
+| `…/account/edit` | Trang trả "Có lỗi xảy ra! … sự cố kỹ thuật" nên không đọc được email tài khoản |
+| Popover hồ sơ partner | Chỉ Tài khoản / Hỗ trợ / Đăng xuất, không có hộp thư thông báo |
+| Listing công khai `apps.sapo.vn/f1genz-reviews-danh-gia-san-pham` | 200, hiện đúng bản mô tả mới (`Cài vào giao diện`), không cảnh báo chặn |
+| Gmail `f1genz2022@gmail.com` | `3833`, `"F1GENZ Reviews"` → 0 thư; `from:(sapo.vn) newer_than:120d` → 1 thư chia sẻ bảng tính (27/10) |
+| Gmail `individual.devs2@gmail.com` | `from:(sapo.vn) newer_than:120d` → 2 thư hợp đồng theme (6–10/10), không có thông báo chặn |
+
+⇒ Lý do chặn chỉ Sapo biết; phải hỏi qua `help.sapo.vn/createticket.html` hoặc 1900 6750.
+
+**Đã bấm "Đăng ứng dụng" và nộp lại thành công**: trạng thái chuyển `Bị chặn` → **`Chờ duyệt lại`**, dải thông báo "Ứng dụng của bạn đang được duyệt lại — Khi nhà phát triển thay đổi thông tin, ứng dụng sẽ được ẩn trên kho và tiến hành duyệt lại."
+
+Trap khi bấm: nút `Đăng ứng dụng` là `button.ui-context-bar__actions-primary` ở góc trên phải và bị widget tìm kiếm của top bar phủ lên; `anti.agent.cursor.click` từ chối hai lần với `TARGET_OBSCURED` (`input#primary-nav-search-input`, rồi `div.next-input--stylized`). Gọi `button.click()` trong trang thì đi qua và form submit đúng.
