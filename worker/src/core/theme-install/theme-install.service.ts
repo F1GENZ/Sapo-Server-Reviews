@@ -48,6 +48,7 @@ const LIQUID_ERROR_RE = /liquid (?:syntax )?error|undefined method|internal serv
 const LOADER_PRESENT_RE = /f1genz-storefront|__F1GENZ_STOREFRONT_CONFIG|include\s+['"][^'"]*reviews-loader['"]/i;
 const WIDGET_PRESENT_RE = /<f1genz-(?:reviews|qna)[\w-]*[\s>]/i;
 const BADGE_PRESENT_RE = /<f1genz-rating-badge[\s>]/i;
+const LEGACY_BADGE_TEXT_RE = /sapo-product-reviews-badge/i;
 const ORDER: Record<ThemeTargetKind, number> = { badge: 0, widget: 1, loader: 2 };
 
 export interface ThemeSummary {
@@ -544,9 +545,11 @@ export class ThemeInstallService {
     } else {
       const badgeSkips: PlannedEdit[] = [];
       let anyAnchored = false;
+      const untouchedLegacy: string[] = [];
       for (const f of cardFiles) {
         const hidden = hideLegacyBadges(f.content);
         const legacy = hidden.hidden > 0;
+        if (!legacy && LEGACY_BADGE_TEXT_RE.test(f.content)) untouchedLegacy.push(f.key);
         if (hasInclude(f.content, SNIPPET_NAMES.badge) || BADGE_PRESENT_RE.test(f.content)) {
           if (legacy) {
             edits.push({ target: 'badge', file: f.key, status: 'hide', reason: `Ẩn ${hidden.hidden} badge đánh giá cũ của Sapo để không hiện trùng` });
@@ -587,6 +590,9 @@ export class ThemeInstallService {
         const target = badgeSkips.find((e) => e.status === 'skipped') ?? badgeSkips[0];
         target.manual = badgeManual;
         warnings.push('Không tự gắn được badge số sao vào thẻ sản phẩm. Dán đoạn mã ở mục Badge vào snippet thẻ sản phẩm của theme.');
+      }
+      if (untouchedLegacy.length > 0) {
+        warnings.push(`Badge đánh giá cũ của Sapo trong ${untouchedLegacy.join(', ')} chiếm nhiều dòng nên chưa ẩn tự động được; gỡ tay để không hiện hai badge.`);
       }
       edits.push(...badgeSkips);
     }

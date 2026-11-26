@@ -477,6 +477,14 @@ describe('ThemeInstallService fallbacks', () => {
     expect(result.warnings.some((w) => w.includes('Dán đoạn mã'))).toBe(true);
   });
 
+  it('warns instead of staying silent when a legacy badge spans several lines', async () => {
+    const { service, files } = makeService({ role: 'unpublished' });
+    files.set('snippets/product-item.bwt', CARD.replace('<div class="price">', '<div class="sapo-product-reviews-badge">\n    <span>4.5</span>\n  </div>\n  <div class="price">'));
+    const plan = await service.plan(STORE, '1');
+    expect(plan.edits.find((e) => e.target === 'badge')?.status).toBe('insert');
+    expect(plan.warnings.some((w) => w.includes('chiếm nhiều dòng nên chưa ẩn tự động được'))).toBe(true);
+  });
+
   it('names the AI rejection code in the plan instead of failing silently', async () => {
     const ctx = makeService({ role: 'unpublished', files: new Map(stuck) });
     const result = await ctx.service.plan(STORE, '1');
