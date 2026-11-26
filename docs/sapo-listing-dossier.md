@@ -12,7 +12,7 @@ Hồ sơ này gom các mục cần nộp khi bấm "Yêu cầu xác nhận" trê
 | Callback URL (install) | `https://api-sapo-reviews.f1genz.dev/api/oauth/install/callback` |
 | Login callback | `https://api-sapo-reviews.f1genz.dev/api/oauth/install/login/callback` |
 | Webhook URL | `https://api-sapo-reviews.f1genz.dev/api/oauth/install/webhooks` |
-| Scopes | `read_products,write_products,read_orders,write_content` (`worker/wrangler.jsonc`, bản production; xem mục 2 về `write_content`) |
+| Scopes | `read_products,write_products,read_orders,write_content,read_themes,write_themes` (`worker/wrangler.jsonc`, bản production; giải trình từng scope ở mục 2) |
 | Mô hình bán | 119.000đ/tháng đặt ở form đăng listing; app không có code kiểm tra trả phí (xem mục 7) |
 
 ## 2. Giải trình scope
@@ -22,9 +22,15 @@ Hồ sơ này gom các mục cần nộp khi bấm "Yêu cầu xác nhận" trê
 | `read_products` | Đồng bộ danh mục sản phẩm để gắn đánh giá | `src/catalog/catalog-sync.service.ts`, `getProducts/getProduct` |
 | `write_products` | Ghi metafield điểm đánh giá (`f1genz_reviews.rating_avg`, `rating_count`, `public_summary`) và `f1genz.config` | `createProductMetafield/updateProductMetafield`, `createMetafield/updateMetafield` |
 | `read_orders` | Nhận webhook `orders/*` và đối chiếu người mua đã mua sản phẩm (cổng "đã mua hàng") | `src/sapo/webhook.service.ts`, `src/purchase/*`. App không gọi API đọc đơn hàng nào: đơn chỉ được ghi từ webhook nhận được sau khi cài |
-| `write_content` | Chưa có giải trình đã kiểm chứng | Code không gọi tài nguyên nào Sapo gán cho scope này (Article, Blog, Comment, Page, Redirect; `support.sapo.vn/oauth`): chỉ có `/products/{id}/metafields.json` và `/metafields.json` trong `src/sapo/sapo-api.service.ts` và `worker/src/core/sapo/sapo-api.service.ts`. [INFERENCE] Sapo có thể gán metafield cấp cửa hàng (`f1genz.config`, `f1genz.api_url`, `f1genz.store_domain`) vào scope này; chưa thử bỏ nó. Quyết định giữ hay bỏ: `docs/sapo-publish-playbook.md` mục 5 |
+| `write_content` | Ghi metafield **cấp cửa hàng** (`owner_resource = shop`): `f1genz.config`, `f1genz.api_url`, `f1genz.store_domain` | `createMetafield/updateMetafield` → `POST/PUT /metafields.json` trong `worker/src/core/sapo/sapo-api.service.ts`; dữ liệu shop-level thật đã kiểm trên shop demo (`metafields.json?namespace=f1genz`) |
+| `read_themes,write_themes` | Cài một lần vào theme (`plan`/`apply`/`uninstall`), đọc asset `.bwt` | `worker/src/core/theme-install/theme-install.service.ts` → `GET/PUT/DELETE /admin/themes/{id}/assets*` |
 
-Không xin: scope theme, script tag, customer. `write_content` được xin (hàng trên) dù code không dùng tài nguyên nào của nó. Giải trình `write_products` cho metafield shop-level là suy luận, và việc Sapo yêu cầu `read_orders` để đăng ký webhook đơn hàng cũng chưa đo được; cả hai cần xác nhận bằng lần cài thật (mục 8).
+Hai điều chỉnh so với bản trước của mục này, đo ngày 2026-11-26:
+
+- **`write_content` không có bảng ghép scope↔Metafield trong tài liệu Sapo.** `support.sapo.vn/oauth` định nghĩa `write_content` = "Article, Blog, Comment, Page, and Redirect"; `read_products/write_products` = "Product, product variant, Product Image, Collect, Custom Collection, Smart Collection"; `read_themes/write_themes` = "Asset and Theme". Trang `support.sapo.vn/metafield` xác nhận metafield gắn được vào Blogs, Custom Collections, Customers, Orders, Pages, Products, Product Variants và có `owner_resource = shop`, nhưng **không nêu scope nào chi phối metafield**. Code không gọi Article/Blog/Comment/Page/Redirect ở bất kỳ đâu.
+- Vì vậy `write_content` được giữ để ghi metafield cấp cửa hàng, không phải để dùng các tài nguyên content. Bỏ nó là một thí nghiệm phải deploy lại Worker rồi cài lại trên shop (cài cũ giữ token cũ), nên chưa chạy; kế hoạch ở `docs/sapo-publish-playbook.md` mục 5.
+
+Không xin scope customer, script tag. Việc Sapo yêu cầu `read_orders` cho đăng ký webhook đơn hàng vẫn chưa đo trực tiếp: app chỉ đọc đơn từ webhook, không gọi `GET /orders.json`, nên scope này mang tính đăng ký topic.
 
 ## 3. Dữ liệu app lưu
 
@@ -59,16 +65,22 @@ Sau khi gỡ app: webhook `app/uninstalled` vô hiệu token, tombstone domain, 
 
 ## 5. Hướng dẫn cài cho merchant
 
-Nguồn: `storefront/snippets/theme/README.md` và trang `/dev` trong admin (`client/src/pages/dev/index.jsx`). Bước chính: nhúng loader widget, thêm `{% include 'f1genz-product-schema' %}` để xuất JSON-LD, tuỳ chọn badge điểm đánh giá từ metafield. Cú pháp `.bwt` chưa chạy thử trên theme Sapo thật.
+Đường chính (đã verify trên theme thật 2026-11-26): mở mục **Hướng dẫn kỹ thuật** trong admin → thẻ *Cài tự động vào theme* → chọn theme (mặc định là bản chưa xuất bản) → xem kế hoạch từng dòng thay đổi → Cài → *Xem trước* bằng `?previewThemeId=<id>`; nút *Gỡ* trả theme về như trước. Code: `worker/src/core/theme-install/`, UI `client/src/pages/dev/ThemeInstallCard.jsx`.
+
+Đường dự phòng khi theme tuỳ biến nhiều: dán tay theo code app đưa ra (loader trong layout, `{% include 'f1genz-reviews-widget' %}` trong trang sản phẩm, `f1genz-rating-badge-card` sau khối giá, `f1genz-product-schema` để xuất JSON-LD). Nguồn: `storefront/snippets/theme/README.md` và trang `/dev` (`client/src/pages/dev/index.jsx`).
+
+Cú pháp `.bwt` của các snippet đã chạy trên theme Sapo thật (theme `1033856` của `f1genz-seafoods.mysapo.net`): badge hiện sau khối giá, badge Sapo cũ không còn render, trang sản phẩm không có lỗi Liquid — bảng đo ở `docs/theme-install.md` mục *Storefront render*.
 
 ## 6. Kiểm thử
 
 | Bộ test | Lệnh |
 |---|---|
-| Server unit/contract | `npm run verify` |
-| Server HTTP contract | `npm run test:e2e` (trong CI chạy với Postgres và Redis thật; chạy cục bộ không có Redis cần `E2E_ALLOW_MEMORY_STATE=1`, khi đó Redis chưa được thử) |
-| Admin SPA, widget storefront | `npm --prefix client run test:e2e` |
+| Worker: typecheck | `npm --prefix worker run typecheck` |
+| Worker: unit + contract (theme install, lifecycle, security, durability) | `npm --prefix worker test` |
+| Admin SPA + widget storefront (Playwright) | `npm --prefix client run test:e2e` |
 | Client unit | `npm --prefix client run test:unit` |
+
+Bảng này chỉ ghi lệnh của kiến trúc đang chạy (Cloudflare Worker + Pages). Bộ test của stack Node/PostgreSQL/PM2 trong `src/` là runbook cũ, không dùng để nộp hồ sơ.
 
 Hồ sơ này không ghi số lượng test hay kết quả: số liệu cũ trong `plans/reports/port-*.md` thuộc giai đoạn trước các bản sửa gần đây. Lấy số liệu từ lần chạy mới nhất trước khi nộp.
 
