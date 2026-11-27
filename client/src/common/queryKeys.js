@@ -16,6 +16,7 @@ export const shopQueryKeys = {
   allQna: (storeDomain, params = {}) => scopedKey(storeDomain, "qna", "all-list", params),
   widgetConfig: (storeDomain) => scopedKey(storeDomain, "widgetConfig"),
   spamConfig: (storeDomain) => scopedKey(storeDomain, "spamConfig"),
+  reviewRequestSettings: (storeDomain) => scopedKey(storeDomain, "reviewRequestSettings"),
   opsHealth: (storeDomain) => scopedKey(storeDomain, "ops", "health"),
   outboundEndpoints: (storeDomain) => scopedKey(storeDomain, "outbound", "endpoints"),
   outboundEvents: (storeDomain) => scopedKey(storeDomain, "outbound", "events"),

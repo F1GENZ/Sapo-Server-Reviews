@@ -131,6 +131,17 @@ export const saveWidgetConfig = async (data) => {
   return res.data?.data;
 };
 
+// ─── Review Request Email Settings ───
+export const fetchReviewRequestSettings = async () => {
+  const res = await httpClient.get("/api/admin/reviews/config/review-request");
+  return res.data?.data;
+};
+
+export const saveReviewRequestSettings = async (data) => {
+  const res = await httpClient.put("/api/admin/reviews/config/review-request", data);
+  return res.data?.data;
+};
+
 export const fetchAllQuestions = async (params = {}) => {
   const { pageSize, sortBy, ...rest } = params;
   const res = await httpClient.get(`/api/admin/qna`, {

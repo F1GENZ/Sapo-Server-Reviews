@@ -10,6 +10,8 @@ import {
   fetchWidgetConfig,
   saveSpamConfig,
   saveWidgetConfig,
+  fetchReviewRequestSettings,
+  saveReviewRequestSettings,
 } from "../../common/ApiService";
 import { getStoreDomain } from "../../common/AuthStorage";
 import { getErrorMessage } from "../../common/getErrorMessage";
@@ -18,7 +20,7 @@ import { toast } from "../../common/toast";
 import {
   BgColorsOutlined, FormOutlined, FileTextOutlined,
   QuestionCircleOutlined, UnorderedListOutlined,
-  AppstoreOutlined, SafetyOutlined, HomeOutlined,
+  AppstoreOutlined, SafetyOutlined, HomeOutlined, MailOutlined,
 } from "@ant-design/icons";
 import Link from "../../components/StoreLink";
 
@@ -37,6 +39,14 @@ const SwitchRow = ({ label, checked, onChange, hint }) => (
     {hint ? <span className="f1g-switch-field__hint">{hint}</span> : null}
   </div>
 );
+
+const DEFAULT_SOCIAL_PROOF = {
+  enabled: false,
+  position: "bottom-left",
+  interval_sec: 10,
+  max_per_session: 3,
+  min_rating: 4,
+};
 
 const defaultConfig = {
   titleText: "Đánh giá sản phẩm",
@@ -78,10 +88,11 @@ const defaultConfig = {
   requirePurchaseToReview: false,
   curatedSliderEnabled: true,
   curatedSliderCount: 15,
+  social_proof: { ...DEFAULT_SOCIAL_PROOF },
 };
 
 const WIDGET_TAB_FIELDS = {
-  display: ["titleText", "showTitle", "showDate", "showFilter", "showSort", "reviewQnaDisplayMode", "reviewLayout", "reviewItemsPerPage", "allowReply", "replyBadgeText", "curatedSliderEnabled", "curatedSliderCount"],
+  display: ["titleText", "showTitle", "showDate", "showFilter", "showSort", "reviewQnaDisplayMode", "reviewLayout", "reviewItemsPerPage", "allowReply", "replyBadgeText", "curatedSliderEnabled", "curatedSliderCount", "social_proof"],
   form: ["formContentMode", "formTitleMode", "formEmailMode", "formPhoneMode", "allowImage", "allowVideo", "requireLogin", "requirePurchaseToReview"],
   trust: ["showVerified", "showVerifiedAll", "verifiedColor"],
   qna: ["allowQnA", "qnaDisplayMode", "qnaItemsPerPage"],
@@ -96,7 +107,49 @@ const TAB_SAVE_LABELS = {
   qna: "Lưu hỏi đáp",
   moderation: "Lưu duyệt & Spam",
   appearance: "Lưu giao diện",
+  email: "Lưu email",
 };
+
+const defaultReviewRequestSettings = {
+  enabled: false,
+  backend: "smtp",
+  smtp: {
+    host: "",
+    port: 587,
+    user: "",
+    from_email: "",
+    from_name: "",
+    tls: "starttls",
+    has_password: false,
+  },
+  has_api_key: false,
+  delay_days: 3,
+  discount_code: "",
+  subject_tpl: "Nhận quà khi đánh giá đơn hàng tại {{shop_name}}",
+  body_tpl: "Chào {{customer_name}},\n\nCảm ơn bạn đã mua {{products}} tại {{shop_name}}. Bạn dành 1 phút chia sẻ cảm nhận để nhận mã giảm giá {{discount_code}} nhé!\n\nĐánh giá ngay: {{review_link}}",
+};
+
+const normalizeReviewRequestSettings = (data = {}) => {
+  const smtp = data.smtp || {};
+  return {
+    ...defaultReviewRequestSettings,
+    ...data,
+    has_api_key: data.api_key_set ?? data.has_api_key ?? false,
+    smtp: {
+      ...defaultReviewRequestSettings.smtp,
+      ...smtp,
+      has_password: smtp.pass_set ?? smtp.has_password ?? false,
+    },
+  };
+};
+
+const EMAIL_TEMPLATE_VARS = [
+  { token: "{{customer_name}}", label: "Tên khách hàng" },
+  { token: "{{shop_name}}", label: "Tên shop" },
+  { token: "{{products}}", label: "Sản phẩm đã mua" },
+  { token: "{{discount_code}}", label: "Mã giảm giá" },
+  { token: "{{review_link}}", label: "Link đánh giá" },
+];
 
 const FORM_MODES = ["hidden", "optional", "required"];
 
@@ -249,6 +302,10 @@ const normalizeLegacyWidgetConfig = (config = {}) => {
   if (next.reviewQnaDisplayMode !== "tabs" && next.reviewQnaDisplayMode !== "stacked") {
     next.reviewQnaDisplayMode = defaultConfig.reviewQnaDisplayMode;
   }
+  next.social_proof = {
+    ...DEFAULT_SOCIAL_PROOF,
+    ...(next.social_proof && typeof next.social_proof === "object" && !Array.isArray(next.social_proof) ? next.social_proof : {}),
+  };
   delete next.formContentRequired;
   return next;
 };
@@ -1322,6 +1379,63 @@ const SettingsPage = () => {
     onError: (error) => toast.error(getErrorMessage(error, "Lưu thất bại")),
   });
 
+  /* ── Social proof subfield updater ── */
+  const usp = (key, value) =>
+    setLocalConfig((prev) => {
+      const base = prev ?? defaultConfig;
+      return { ...base, social_proof: { ...DEFAULT_SOCIAL_PROOF, ...(base.social_proof || {}), [key]: value } };
+    });
+
+  /* ── Review-request email settings ── */
+  // Endpoint ships with the email worker release: a 404 hides the whole tab so
+  // an admin on an older worker never renders a broken panel.
+  const { data: reviewRequestSettings, error: reviewRequestError } = useQuery({
+    queryKey: shopQueryKeys.reviewRequestSettings(storeDomain),
+    queryFn: fetchReviewRequestSettings,
+    enabled: !!storeDomain,
+    retry: (failureCount, error) => error?.response?.status !== 404 && failureCount < 2,
+  });
+  const reviewRequestUnavailable = reviewRequestError?.response?.status === 404;
+  const [rrDraft, setRrDraft] = useState(null);
+  const [rrPassword, setRrPassword] = useState("");
+  const [rrApiKey, setRrApiKey] = useState("");
+  const rr = rrDraft ?? normalizeReviewRequestSettings(reviewRequestSettings);
+  const urs = (key, value) =>
+    setRrDraft((prev) => ({ ...(prev ?? normalizeReviewRequestSettings(reviewRequestSettings)), [key]: value }));
+  const ursSmtp = (key, value) =>
+    setRrDraft((prev) => {
+      const base = prev ?? normalizeReviewRequestSettings(reviewRequestSettings);
+      return { ...base, smtp: { ...base.smtp, [key]: value } };
+    });
+  const isReviewRequestDirty = useMemo(() => {
+    if (rrPassword || rrApiKey) return true;
+    if (rrDraft === null) return false;
+    return !isFieldEqual(rrDraft, normalizeReviewRequestSettings(reviewRequestSettings));
+  }, [rrDraft, reviewRequestSettings, rrPassword, rrApiKey]);
+  const buildReviewRequestPayload = useCallback(() => {
+    const { smtp = {}, ...rest } = rr;
+    const { has_password: _hasPassword, pass_set: _passSet, pass_hint: _passHint, ...smtpRest } = smtp;
+    delete rest.has_api_key;
+    delete rest.api_key_set;
+    delete rest.api_key_hint;
+    const payload = { ...rest, smtp: smtpRest };
+    if (rrPassword) payload.smtp.pass = rrPassword;
+    if (rrApiKey) payload.api_key = rrApiKey;
+    return payload;
+  }, [rr, rrPassword, rrApiKey]);
+  const reviewRequestMutation = useMutation({
+    mutationFn: (data) => saveReviewRequestSettings(data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(shopQueryKeys.reviewRequestSettings(storeDomain), data);
+      setRrDraft(null);
+      setRrPassword("");
+      setRrApiKey("");
+      toast.success("Đã lưu cấu hình email xin đánh giá");
+    },
+    onError: (error) => toast.error(getErrorMessage(error, "Lưu thất bại")),
+  });
+  const rrBackendValue = rr.backend === "smtp" && rr.smtp?.host === "smtp.gmail.com" ? "gmail" : rr.backend;
+
   const widgetTabDirtyMap = useMemo(
     () =>
       Object.fromEntries(
@@ -1339,12 +1453,13 @@ const SettingsPage = () => {
   const tabDirtyMap = useMemo(
     () => ({
       ...widgetTabDirtyMap,
+      email: isReviewRequestDirty,
       moderation: Boolean(widgetTabDirtyMap.moderation || isSpamDirty),
     }),
-    [widgetTabDirtyMap, isSpamDirty]
+    [widgetTabDirtyMap, isReviewRequestDirty, isSpamDirty]
   );
 
-  const isDirty = isWidgetDirty || isSpamDirty;
+  const isDirty = isWidgetDirty || isSpamDirty || isReviewRequestDirty;
 
   const handleTabChange = useCallback((nextKey) => {
     setActiveTabKey(nextKey);
@@ -1362,13 +1477,16 @@ const SettingsPage = () => {
     if (isSpamDirty) {
       tasks.push(spamMutation.mutateAsync(spam));
     }
+    if (isReviewRequestDirty) {
+      tasks.push(reviewRequestMutation.mutateAsync(buildReviewRequestPayload()));
+    }
     if (!tasks.length) return;
     try {
       await Promise.all(tasks);
     } catch {
       // Mutation handlers already show the actionable error message.
     }
-  }, [isSpamDirty, isWidgetDirty, normalizedWidgetConfig, spam, spamMutation, widgetMutation]);
+  }, [buildReviewRequestPayload, isReviewRequestDirty, isSpamDirty, isWidgetDirty, normalizedWidgetConfig, reviewRequestMutation, spam, spamMutation, widgetMutation]);
 
   useEffect(() => {
     if (!isDirty) return undefined;
@@ -1380,7 +1498,7 @@ const SettingsPage = () => {
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [isDirty]);
 
-  const saving = widgetMutation.isPending || spamMutation.isPending;
+  const saving = widgetMutation.isPending || spamMutation.isPending || reviewRequestMutation.isPending;
   const tabLabel = useCallback((key, label) => (
     <span className="f1g-tab-label">
       {label}
@@ -1510,6 +1628,76 @@ const SettingsPage = () => {
                     showCount
                   />
                 </div>
+              )}
+            </Flex>
+            <Divider style={{ margin: "2px 0" }} />
+            <Flex vertical gap={10}>
+              <Flex vertical gap={2}>
+                <Text strong style={{ fontSize: 13 }}>Popup bằng chứng xã hội</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>Popup nhỏ hiển thị review 4-5 sao gần đây để tăng niềm tin trên storefront.</Text>
+              </Flex>
+              <Flex align="center" gap={10}>
+                <SettingsSwitch
+                  label="Bật popup bằng chứng xã hội"
+                  checked={formConfig.social_proof?.enabled ?? false}
+                  onChange={(v) => usp("enabled", v)}
+                />
+                <Text style={{ fontSize: 13 }}>Bật popup bằng chứng xã hội</Text>
+              </Flex>
+              {formConfig.social_proof?.enabled && (
+                <>
+                  <div>
+                    <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Vị trí popup</Text>
+                    <Select
+                      value={formConfig.social_proof?.position ?? "bottom-left"}
+                      onChange={(v) => usp("position", v)}
+                      size="small"
+                      style={{ width: "100%" }}
+                      options={[
+                        { label: "Góc trái dưới", value: "bottom-left" },
+                        { label: "Góc phải dưới", value: "bottom-right" },
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Khoảng cách giữa 2 lần hiện (giây)</Text>
+                    <InputNumber
+                      min={8}
+                      max={15}
+                      size="small"
+                      style={{ width: "100%" }}
+                      value={formConfig.social_proof?.interval_sec ?? 10}
+                      onChange={(v) => usp("interval_sec", v ?? 10)}
+                    />
+                  </div>
+                  <div>
+                    <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Số popup tối đa mỗi phiên</Text>
+                    <InputNumber
+                      min={1}
+                      max={5}
+                      size="small"
+                      style={{ width: "100%" }}
+                      value={formConfig.social_proof?.max_per_session ?? 3}
+                      onChange={(v) => usp("max_per_session", v ?? 3)}
+                    />
+                  </div>
+                  <div>
+                    <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Chỉ hiện review từ số sao</Text>
+                    <Select
+                      value={formConfig.social_proof?.min_rating ?? 4}
+                      onChange={(v) => usp("min_rating", v)}
+                      size="small"
+                      style={{ width: "100%" }}
+                      options={[
+                        { label: "1 sao trở lên", value: 1 },
+                        { label: "2 sao trở lên", value: 2 },
+                        { label: "3 sao trở lên", value: 3 },
+                        { label: "4 sao trở lên", value: 4 },
+                        { label: "Chỉ 5 sao", value: 5 },
+                      ]}
+                    />
+                  </div>
+                </>
               )}
             </Flex>
           </Flex>
@@ -1812,6 +2000,168 @@ const SettingsPage = () => {
         </>
       ),
     },
+    ...(reviewRequestUnavailable
+      ? []
+      : [
+          {
+            key: "email",
+            label: tabLabel("email", "Email xin đánh giá"),
+            icon: <MailOutlined />,
+            children: (
+              <>
+                <Flex vertical gap={14}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Tự động gửi email xin đánh giá sau khi đơn hàng hoàn tất, kèm mã giảm giá khuyến khích khách quay lại.
+                  </Text>
+                  <Flex align="center" gap={10}>
+                    <SettingsSwitch label="Bật email xin đánh giá tự động" checked={rr.enabled} onChange={(v) => urs("enabled", v)} />
+                    <Text style={{ fontSize: 13 }}>Bật email xin đánh giá tự động</Text>
+                  </Flex>
+                  <div>
+                    <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Cổng gửi email</Text>
+                    <Select
+                      value={rrBackendValue}
+                      onChange={(v) => {
+                        if (v === "gmail") {
+                          setRrDraft((prev) => {
+                            const base = prev ?? normalizeReviewRequestSettings(reviewRequestSettings);
+                            return {
+                              ...base,
+                              backend: "smtp",
+                              smtp: { ...base.smtp, host: "smtp.gmail.com", port: 587, tls: "starttls" },
+                            };
+                          });
+                        } else if (v === "smtp") {
+                          urs("backend", "smtp");
+                        } else {
+                          urs("backend", v);
+                        }
+                      }}
+                      size="small"
+                      style={{ width: "100%" }}
+                      options={[
+                        { label: "Gmail SMTP (App Password)", value: "gmail" },
+                        { label: "SMTP khác", value: "smtp" },
+                        { label: "Resend", value: "resend" },
+                        { label: "SendGrid", value: "sendgrid" },
+                      ]}
+                    />
+                  </div>
+                  {rr.backend === "smtp" && (
+                    <>
+                      {rrBackendValue === "gmail" && (
+                        <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: 10 }}>
+                          <Text style={{ display: "block", fontSize: 12, color: "#1d4ed8" }}>
+                            Gmail yêu cầu mật khẩu ứng dụng (App Password) — tạo trong phần Bảo mật của tài khoản Google khi đã bật xác minh 2 bước.
+                          </Text>
+                        </div>
+                      )}
+                      <div>
+                        <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>SMTP host</Text>
+                        <Input value={rr.smtp?.host || ""} onChange={(e) => ursSmtp("host", e.target.value)} size="small" placeholder="smtp.gmail.com" />
+                      </div>
+                      <Row gutter={12}>
+                        <Col span={12}>
+                          <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Port</Text>
+                          <InputNumber min={1} max={65535} size="small" style={{ width: "100%" }} value={rr.smtp?.port ?? 587} onChange={(v) => ursSmtp("port", v ?? 587)} />
+                        </Col>
+                        <Col span={12}>
+                          <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Bảo mật (TLS)</Text>
+                          <Select
+                            value={rr.smtp?.tls ?? "starttls"}
+                            onChange={(v) => ursSmtp("tls", v)}
+                            size="small"
+                            style={{ width: "100%" }}
+                            options={[
+                              { label: "STARTTLS (587)", value: "starttls" },
+                              { label: "TLS/SSL (465)", value: "tls" },
+                            ]}
+                          />
+                        </Col>
+                      </Row>
+                      <div>
+                        <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>SMTP user</Text>
+                        <Input value={rr.smtp?.user || ""} onChange={(e) => ursSmtp("user", e.target.value)} size="small" placeholder="shop@gmail.com" />
+                      </div>
+                      <div>
+                        <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>SMTP password / App password</Text>
+                        <Input.Password
+                          value={rrPassword}
+                          onChange={(e) => setRrPassword(e.target.value)}
+                          size="small"
+                          placeholder={rr.smtp?.has_password ? "Đã lưu — nhập để thay đổi" : "Nhập mật khẩu SMTP"}
+                          autoComplete="new-password"
+                        />
+                        {rr.smtp?.has_password && !rrPassword && (
+                          <Text type="secondary" style={{ display: "block", marginTop: 4, fontSize: 11 }}>Đã lưu — nhập để thay đổi.</Text>
+                        )}
+                      </div>
+                      <Row gutter={12}>
+                        <Col span={12}>
+                          <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Email người gửi</Text>
+                          <Input value={rr.smtp?.from_email || ""} onChange={(e) => ursSmtp("from_email", e.target.value)} size="small" placeholder="shop@gmail.com" />
+                        </Col>
+                        <Col span={12}>
+                          <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Tên người gửi</Text>
+                          <Input value={rr.smtp?.from_name || ""} onChange={(e) => ursSmtp("from_name", e.target.value)} size="small" placeholder="Tên shop" />
+                        </Col>
+                      </Row>
+                    </>
+                  )}
+                  {(rr.backend === "resend" || rr.backend === "sendgrid") && (
+                    <div>
+                      <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>API key {rr.backend === "resend" ? "Resend" : "SendGrid"}</Text>
+                      <Input.Password
+                        value={rrApiKey}
+                        onChange={(e) => setRrApiKey(e.target.value)}
+                        size="small"
+                        placeholder={rr.has_api_key ? "Đã lưu — nhập để thay đổi" : "Nhập API key"}
+                        autoComplete="new-password"
+                      />
+                      {rr.has_api_key && !rrApiKey && (
+                        <Text type="secondary" style={{ display: "block", marginTop: 4, fontSize: 11 }}>Đã lưu — nhập để thay đổi.</Text>
+                      )}
+                    </div>
+                  )}
+                  <Divider style={{ margin: "2px 0" }} />
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Gửi sau (ngày)</Text>
+                      <InputNumber min={0} max={60} size="small" style={{ width: "100%" }} value={rr.delay_days ?? 3} onChange={(v) => urs("delay_days", v ?? 3)} />
+                    </Col>
+                    <Col span={12}>
+                      <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Mã giảm giá</Text>
+                      <Input value={rr.discount_code || ""} onChange={(e) => urs("discount_code", e.target.value)} size="small" placeholder="VD: REVIEW10" maxLength={64} />
+                    </Col>
+                  </Row>
+                  <div>
+                    <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Tiêu đề email</Text>
+                    <Input value={rr.subject_tpl || ""} onChange={(e) => urs("subject_tpl", e.target.value)} size="small" />
+                  </div>
+                  <div>
+                    <Text strong style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Nội dung email</Text>
+                    <Input.TextArea
+                      value={rr.body_tpl || ""}
+                      onChange={(e) => urs("body_tpl", e.target.value)}
+                      rows={6}
+                      style={{ fontSize: 13 }}
+                    />
+                    <Flex wrap="wrap" gap={4} style={{ marginTop: 6 }}>
+                      {EMAIL_TEMPLATE_VARS.map((v) => (
+                        <Tag key={v.token} style={{ margin: 0 }} title={v.label}>
+                          {v.token}
+                        </Tag>
+                      ))}
+                    </Flex>
+                    <Text type="secondary" style={{ display: "block", marginTop: 4, fontSize: 11 }}>
+                      Biến khả dụng: {EMAIL_TEMPLATE_VARS.map((v) => v.token).join(" ")}
+                    </Text>
+                  </div>
+                </Flex>
+              </>
+            ),
+          },
+        ]),
   ];
 
   return (
