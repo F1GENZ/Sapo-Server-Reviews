@@ -3205,4 +3205,165 @@
 
   mountProductSchemaIfMissing();
   document.addEventListener('DOMContentLoaded', mountProductSchemaIfMissing, { once: true });
+
+  // ── Social proof popup + review-request token (opt-in, defaults OFF server-side) ──
+  (() => {
+    if (window.__f1genzSapoSocialProofBooted) return;
+    window.__f1genzSapoSocialProofBooted = true;
+    const SP_WIDGET_SELECTOR = 'f1genz-reviews-panel, f1genz-qna-panel, f1genz-reviews, f1genz-rating-badge, f1genz-product-schema, f1genz-curated-slider';
+    const esc = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+    const timeAgo = (ts) => {
+      const diff = Math.max(0, Date.now() - Number(ts || 0));
+      const minutes = Math.floor(diff / 60000);
+      if (minutes < 60) return `${Math.max(1, minutes)} phút trước`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours} giờ trước`;
+      const days = Math.floor(hours / 24);
+      if (days < 30) return `${days} ngày trước`;
+      return `${Math.floor(days / 30)} tháng trước`;
+    };
+    const isCheckoutLike = () => /\/(cart|checkout|checkouts|thanh-toan|gio-hang|ban-be)(\/|$|\?)/i.test(window.location.pathname);
+    const stars = (rating) => '★★★★★'.slice(0, Math.max(1, Math.min(5, Math.round(rating || 5))));
+    const popupApiBase = () => {
+      const direct = normalizeApiUrl((readRuntimeConfigObject() || {}).apiUrl);
+      if (direct) return direct;
+      const el = document.querySelector(`${SP_WIDGET_SELECTOR}[data-api-url]`);
+      if (el) {
+        const fromAttr = normalizeApiUrl(el.getAttribute('data-api-url'));
+        if (fromAttr) return fromAttr;
+      }
+      return normalizeApiUrl(window.location.origin);
+    };
+    const popupStoreDomain = () => {
+      const fromCfg = String((readRuntimeConfigObject() || {}).storeDomain || '').trim();
+      if (fromCfg) return fromCfg;
+      const el = document.querySelector(`${SP_WIDGET_SELECTOR}[storeDomain]`);
+      if (el) {
+        const attr = String(el.getAttribute('storeDomain') || '').trim();
+        if (attr) return attr;
+      }
+      return window.location.hostname;
+    };
+
+    // Review-request token: product URL ?f1genz_review_token=..&f1genz_write=1 opens the write form and
+    // the submit carries the token as proof of purchase.
+    const reviewToken = new URLSearchParams(window.location.search).get('f1genz_review_token') || '';
+    if (reviewToken) {
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        try {
+          const url = typeof input === 'string' ? input : input && input.url;
+          const method = String((init && init.method) || 'GET').toUpperCase();
+          if (method === 'POST' && /\/api\/public\/reviews\/[^/?]+(\?|$)/.test(String(url)) && init && init.body) {
+            const parsed = JSON.parse(String(init.body));
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.review_token === undefined) {
+              parsed.review_token = reviewToken;
+              init = { ...init, body: JSON.stringify(parsed) };
+            }
+          }
+        } catch {}
+        return nativeFetch(input, init);
+      };
+      if (new URLSearchParams(window.location.search).get('f1genz_write') === '1') {
+        let tries = 0;
+        const openTimer = window.setInterval(() => {
+          tries += 1;
+          const widget = document.querySelector('f1genz-reviews, f1genz-reviews-panel');
+          const trigger = widget && widget.querySelector('[data-action="open-form"]');
+          if (trigger) {
+            trigger.click();
+            window.clearInterval(openTimer);
+          } else if (tries > 40) {
+            window.clearInterval(openTimer);
+          }
+        }, 500);
+      }
+    }
+
+    const bootPopup = async () => {
+      if (isCheckoutLike()) return;
+      const api = popupApiBase();
+      const storeDomain = popupStoreDomain();
+      if (!api || !storeDomain) return;
+      let config;
+      try {
+        const res = await fetch(`${api}/api/public/reviews/config/widget?storeDomain=${encodeURIComponent(storeDomain)}`);
+        const json = await res.json();
+        config = json && typeof json === 'object' && 'data' in json ? json.data : json;
+      } catch {
+        return;
+      }
+      const sp = (config && config.social_proof) || null;
+      if (!sp || sp.enabled !== true) return;
+      let items;
+      try {
+        const res = await fetch(`${api}/api/public/reviews/popup-feed?storeDomain=${encodeURIComponent(storeDomain)}`);
+        const json = await res.json();
+        const data = json && typeof json === 'object' && 'data' in json ? json.data : json;
+        items = data && Array.isArray(data.items) ? data.items : [];
+      } catch {
+        return;
+      }
+      const minRating = Math.max(1, Math.min(5, Math.floor(Number(sp.min_rating) || 4)));
+      items = items.filter((item) => Number(item.rating) >= minRating);
+      if (!items.length) return;
+
+      const KEY = 'f1genz_sapo_social_proof';
+      let state;
+      try {
+        state = JSON.parse(sessionStorage.getItem(KEY) || '{}');
+      } catch {
+        state = {};
+      }
+      state = typeof state === 'object' && state ? state : {};
+      if (state.dismissed) return;
+      const maxPerSession = Math.max(1, Math.min(5, Math.floor(Number(sp.max_per_session) || 3)));
+      state.shown = Math.min(maxPerSession, Math.floor(Number(state.shown) || 0));
+      if (state.shown >= maxPerSession) return;
+
+      const position = sp.position === 'bottom-right' ? 'bottom-right' : 'bottom-left';
+      const intervalMs = Math.max(8000, Math.min(15000, Math.floor(Number(sp.interval_sec) || 10) * 1000));
+      const root = document.createElement('div');
+      root.className = `f1genz-sp-root f1genz-sp-root--${position}`;
+      document.body.appendChild(root);
+
+      const show = () => {
+        if (state.dismissed || state.shown >= maxPerSession) return;
+        const item = items[state.shown % items.length];
+        const card = document.createElement('div');
+        card.className = 'f1genz-sp-popup';
+        card.setAttribute('role', 'status');
+        card.innerHTML = `
+          <button type="button" class="f1genz-sp-close" aria-label="Đóng thông báo">×</button>
+          <div class="f1genz-sp-stars">${esc(stars(item.rating))}</div>
+          <div class="f1genz-sp-body"><strong>${esc(item.author)}</strong> đánh giá <strong>${esc(item.product_title)}</strong></div>
+          ${item.excerpt ? `<div class="f1genz-sp-excerpt">“${esc(item.excerpt)}”</div>` : ''}
+          <div class="f1genz-sp-time">${esc(timeAgo(item.created_at))}</div>`;
+        card.querySelector('.f1genz-sp-close').addEventListener('click', () => {
+          state.dismissed = true;
+          try {
+            sessionStorage.setItem(KEY, JSON.stringify(state));
+          } catch {}
+          card.remove();
+        });
+        root.appendChild(card);
+        requestAnimationFrame(() => card.classList.add('f1genz-sp-popup--visible'));
+        state.shown += 1;
+        try {
+          sessionStorage.setItem(KEY, JSON.stringify(state));
+        } catch {}
+        window.setTimeout(() => {
+          card.classList.remove('f1genz-sp-popup--visible');
+          window.setTimeout(() => card.remove(), 400);
+        }, Math.min(intervalMs, 10000));
+      };
+
+      window.setTimeout(show, 2000);
+      window.setInterval(show, intervalMs);
+    };
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootPopup, { once: true });
+    else bootPopup();
+  })();
 })();

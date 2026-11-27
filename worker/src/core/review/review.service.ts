@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -9,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { APP_ENV } from '../config/app-config.module';
 import { mergeInstallMetadataKey } from '../database/install-metadata';
 import {
   MetafieldSyncPendingService,
@@ -31,7 +33,10 @@ import type { Review, RatingSummary, MediaItem } from './interfaces/review.inter
 import type { SpamConfig } from './interfaces/spam-config.interface';
 import { DEFAULT_SPAM_CONFIG } from './interfaces/spam-config.interface';
 import type { WidgetConfig } from './interfaces/widget-config.interface';
-import { DEFAULT_WIDGET_CONFIG } from './interfaces/widget-config.interface';
+import { DEFAULT_WIDGET_CONFIG, normalizeSocialProof } from './interfaces/widget-config.interface';
+import { buildPopupFeed, emptyPopupFeed, type PopupFeed } from './popup-feed';
+import { createReviewTokenSigner, type ReviewTokenSigner } from '../email/review-token';
+import type { AppEnv } from '../config/env.schema';
 import type { CreateReviewDto } from './dto/create-review.dto';
 import type { UpdateReviewDto } from './dto/update-review.dto';
 import { WIDGET_CONFIG_KEYS, type UpdateWidgetConfigDto } from './dto/update-widget-config.dto';
@@ -144,12 +149,13 @@ const ALLOWED_WIDGET_KEYS = new Set<string>(WIDGET_CONFIG_KEYS);
 
 const toWidgetConfig = (saved: unknown): WidgetConfig => {
   const entries = saved && typeof saved === 'object' ? Object.entries(saved) : [];
-  return {
+  const merged = {
     ...DEFAULT_WIDGET_CONFIG,
     ...(Object.fromEntries(
       entries.filter(([key, val]) => ALLOWED_WIDGET_KEYS.has(key) && val !== undefined),
     ) as Partial<WidgetConfig>),
   };
+  return { ...merged, social_proof: normalizeSocialProof((merged as Record<string, unknown>).social_proof) };
 };
 
 export type SummaryMetafield = {
@@ -323,7 +329,12 @@ export class ReviewService {
     private readonly pending: MetafieldSyncPendingService,
     private readonly media: MediaService,
     private readonly outbound: OutboundWebhookService,
+    @Inject(APP_ENV) private readonly env: AppEnv,
   ) {}
+
+  private reviewTokenSigner(): ReviewTokenSigner {
+    return createReviewTokenSigner(this.env.DATA_ENCRYPTION_KEY);
+  }
 
   private lockKey(shopId: string, productId: string): string {
     return `lock:review:${shopId}:${productId}`;
@@ -718,7 +729,10 @@ export class ReviewService {
     const hasIdentity = Boolean(identity.email || identity.phone);
     const gated = config.requirePurchaseToReview === true;
 
-    if (gated && !hasIdentity) {
+    // A signed link from the review-request email proves the purchase without identity input.
+    const tokenOrderId = input.reviewToken ? this.reviewTokenSigner().verify(install.shopId, input.reviewToken, productId) : null;
+
+    if (gated && !hasIdentity && !tokenOrderId) {
       throw new BadRequestException({
         code: 'identity_required',
         message: 'Email or phone is required to verify your purchase',
@@ -726,9 +740,9 @@ export class ReviewService {
     }
     if (hasIdentity) await hooks.chargeIdentity(identity);
 
-    const verified = hasIdentity
-      ? await this.lookupPurchase(install.shopId, productId, identity, gated)
-      : false;
+    const verified =
+      Boolean(tokenOrderId) ||
+      (hasIdentity ? await this.lookupPurchase(install.shopId, productId, identity, gated) : false);
     if (gated && !verified) {
       throw new ForbiddenException({
         code: 'purchase_required',
@@ -1118,6 +1132,20 @@ export class ReviewService {
     return this.readWidgetConfig(install.metadata);
   }
 
+  /** Social-proof popup feed: masked recent high-rating reviews, cached 60 s per shop+rating floor. */
+  async getPopupFeed(storeDomain: string): Promise<PopupFeed> {
+    const install = await this.resolveServingInstall(storeDomain);
+    if (!install) return emptyPopupFeed();
+    const config = this.readWidgetConfig(install.metadata);
+    if (!config.social_proof.enabled) return emptyPopupFeed();
+    const cacheKey = `popup-feed:${install.shopId}:${config.social_proof.min_rating}`;
+    const cached = await this.redis.get<PopupFeed>(cacheKey).catch(() => null);
+    if (cached && Array.isArray(cached.items) && typeof cached.updated_at === 'number') return cached;
+    const feed = await buildPopupFeed(this.prisma, install.shopId, config.social_proof.min_rating);
+    await this.redis.set(cacheKey, feed, 60).catch(() => undefined);
+    return feed;
+  }
+
   async getServingWidgetConfig(storeDomain: string): Promise<WidgetConfig> {
     const install = await this.requireServingInstall(storeDomain);
     return this.readWidgetConfig(install.metadata);
@@ -1248,6 +1276,11 @@ export class ReviewService {
     const patch = Object.fromEntries(
       Object.entries(rawPatch).filter(([key]) => ALLOWED_WIDGET_KEYS.has(key)),
     );
+    if (patch.social_proof !== undefined) {
+      // Sub-field merge: a PUT of {social_proof:{enabled:true}} keeps the other popup settings.
+      const current = this.readWidgetConfig(install.metadata);
+      patch.social_proof = { ...current.social_proof, ...normalizeSocialProof(patch.social_proof) };
+    }
     const saved = await mergeInstallMetadataKey(this.prisma, storeDomain, WIDGET_CONFIG_METADATA_KEY, patch);
     if (!saved) throw new ConflictException('App not installed for this store');
     const config = toWidgetConfig(saved);

@@ -1592,6 +1592,53 @@ describe('f1genz-sapo-reviews-api Cloudflare Worker (StoreDO SQLite + Edge Cache
     });
     expect(res.status).toBe(401);
   });
+
+  it('exposes the review-request config and popup feed endpoints', async () => {
+    const headers = buildAdminHeaders();
+    const getUrl = 'https://api-sapo-reviews.f1genz.dev/api/admin/reviews/config/review-request';
+
+    const defaultRes = await SELF.fetch(getUrl, { headers });
+    expect(defaultRes.status).toBe(200);
+    const defaultMasked = await readData<Record<string, unknown>>(defaultRes);
+    expect(defaultMasked).toMatchObject({ enabled: false, backend: 'smtp', api_key_set: false });
+
+    const putRes = await SELF.fetch(getUrl, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        enabled: true,
+        delay_days: 1,
+        smtp: { host: 'smtp.gmail.com', port: 465, user: 'shop@gmail.com', pass: 'route-secret-999', from_email: 'shop@gmail.com', tls: 'tls' },
+      }),
+    });
+    expect(putRes.status).toBe(200);
+    const putText = await putRes.text();
+    expect(putText).not.toContain('route-secret-999');
+    const saved = await readData<Record<string, unknown>>(await SELF.fetch(getUrl, { headers }));
+    expect(saved.enabled).toBe(true);
+    expect(saved.delay_days).toBe(1);
+    const savedSmtp = saved.smtp as Record<string, unknown>;
+    expect(savedSmtp.pass_set).toBe(true);
+
+    const spRes = await SELF.fetch('https://api-sapo-reviews.f1genz.dev/api/admin/reviews/widget-config', {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ social_proof: { enabled: true, min_rating: 4, position: 'bottom-right' } }),
+    });
+    expect(spRes.status).toBe(200);
+    expect(JSON.stringify(await spRes.json())).toContain('bottom-right');
+
+    const feedRes = await SELF.fetch(`https://api-sapo-reviews.f1genz.dev/api/public/reviews/popup-feed?storeDomain=${STORE_DOMAIN}`);
+    expect(feedRes.status).toBe(200);
+    const feed = await readData<{ v: number; items: Array<Record<string, unknown>> }>(feedRes);
+    expect(feed.v).toBe(1);
+    expect(Array.isArray(feed.items)).toBe(true);
+    const allowedKeys: Record<string, true> = { product_id: true, product_title: true, product_handle: true, rating: true, author: true, excerpt: true, created_at: true };
+    for (const item of feed.items) {
+      expect(Object.keys(item).every((key) => allowedKeys[key] === true)).toBe(true);
+      expect(Number(item.rating)).toBeGreaterThanOrEqual(4);
+    }
+  });
 });
 
 describe('Sapo install callback catalog backfill', () => {

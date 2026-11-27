@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { CatalogSyncService } from '../catalog/catalog-sync.service';
+import { ReviewRequestService } from '../email/review-request.service';
 import { STORE_DOMAIN_RE } from '../common/security/public-limits';
 import { PrismaService } from '../database/prisma.service';
 import type { EventsQueuePort } from '../../events-queue';
@@ -64,6 +65,7 @@ const DEFAULT_MAX_ATTEMPTS = 8;
 const SWEEP_PAGE = 50;
 const SWEEP_MAX_EVENTS = 200;
 
+
 @Injectable()
 export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
@@ -77,6 +79,7 @@ export class WebhookService {
     private readonly catalogSync: CatalogSyncService,
     private readonly purchases: PurchaseStoreService,
     private readonly eventsQueue?: EventsQueuePort,
+    private readonly reviewRequests?: ReviewRequestService,
   ) {}
 
   private getPayload(body: unknown): Record<string, unknown> {
@@ -539,5 +542,12 @@ export class WebhookService {
       return;
     }
     await this.purchases.syncOrder({ shopId, order: payload });
+    if (this.reviewRequests) {
+      try {
+        await this.reviewRequests.detectOrderFulfilled(shopId, storeDomain, payload);
+      } catch (error) {
+        this.logger.warn(`Review request detection failed for ${storeDomain}: ${error instanceof Error ? error.message : 'unknown error'}`);
+      }
+    }
   }
 }

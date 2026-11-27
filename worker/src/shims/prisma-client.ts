@@ -260,6 +260,24 @@ export interface OutboundWebhookDelivery {
   endpoint?: OutboundWebhookEndpoint;
 }
 
+export interface ReviewRequestEmail {
+  id: string;
+  shopId: string;
+  storeDomain: string;
+  orderId: string;
+  orderCode: string | null;
+  customerEmail: string;
+  customerName: string | null;
+  productIds: unknown;
+  status: string;
+  attempts: number;
+  runAt: Date;
+  lastError: string | null;
+  sentAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface ModelDelegate<T = any> {
   findUnique(args?: unknown): Promise<T | null>;
@@ -315,6 +333,7 @@ export class PrismaClient {
   readonly importRun!: ModelDelegate<ImportRun>;
   readonly outboundWebhookEndpoint!: ModelDelegate<OutboundWebhookEndpoint>;
   readonly outboundWebhookDelivery!: ModelDelegate<OutboundWebhookDelivery>;
+  readonly reviewRequestEmail!: ModelDelegate<ReviewRequestEmail>;
 
   async $connect(): Promise<void> {}
   async $disconnect(): Promise<void> {}

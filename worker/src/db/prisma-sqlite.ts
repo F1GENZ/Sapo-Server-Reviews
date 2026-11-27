@@ -426,6 +426,25 @@ export const MODEL_CONFIGS: Record<string, ModelConfig> = {
     createdAtType: 'date',
     updatedAtType: 'date',
   },
+  reviewRequestEmail: {
+    table: 'review_request_emails',
+    dateFields: ['runAt', 'sentAt', 'createdAt', 'updatedAt'],
+    bigIntFields: [],
+    intFields: ['attempts'],
+    boolFields: [],
+    jsonFields: ['productIds'],
+    defaults: {
+      status: () => 'queued',
+      attempts: () => 0,
+      orderCode: () => null,
+      customerName: () => null,
+      lastError: () => null,
+      sentAt: () => null,
+    },
+    uniqueKeys: [['id'], ['shopId', 'orderId']],
+    createdAtType: 'date',
+    updatedAtType: 'date',
+  },
 };
 
 const toDate = (val: unknown): Date | null => {
@@ -680,6 +699,7 @@ export class PrismaSqliteService {
   readonly importRun: PrismaModelDelegate;
   readonly outboundWebhookEndpoint: PrismaModelDelegate;
   readonly outboundWebhookDelivery: PrismaModelDelegate;
+  readonly reviewRequestEmail: PrismaModelDelegate;
 
   constructor(private readonly sql: SqlStorageLike) {
     this.initSchema();
@@ -698,6 +718,7 @@ export class PrismaSqliteService {
     this.importRun = this.createDelegate('importRun');
     this.outboundWebhookEndpoint = this.createDelegate('outboundWebhookEndpoint');
     this.outboundWebhookDelivery = this.createDelegate('outboundWebhookDelivery');
+    this.reviewRequestEmail = this.createDelegate('reviewRequestEmail');
   }
 
   private initSchema(): void {

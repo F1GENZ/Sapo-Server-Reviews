@@ -8,6 +8,7 @@ import { OutboundDispatcherService } from '../outbound/outbound-dispatcher.servi
 import { recordDurabilitySweep } from './durability-sweep-state';
 import { RedisService, type RedisLock } from '../redis/redis.service';
 import { ReviewService } from '../review/review.service';
+import { ReviewRequestService } from '../email/review-request.service';
 import { SapoService } from '../sapo/sapo.service';
 import { WebhookService } from '../sapo/webhook.service';
 
@@ -39,6 +40,8 @@ export type SweepReport = {
   webhookRetention?: { deleted: number };
   outboundDispatch?: { attempted: number; delivered: number; failed: number };
   outboundReclaim?: { reclaimed: number };
+  emailQueue?: { attempted: number; sent: number; failed: number; cancelled: number; retries: number };
+  emailRetention?: { deleted: number };
   uninstallRetention?: { shops: number; purchases: number; events: number };
   mediaOrphans?: { scanned: number; deleted: number; kept: number };
   errors: string[];
@@ -51,6 +54,8 @@ type SweepStep =
   | 'webhookRetry'
   | 'metafields'
   | 'webhookRetention'
+  | 'emailQueue'
+  | 'emailRetention'
   | 'uninstallRetention'
   | 'mediaOrphans';
 
@@ -72,6 +77,7 @@ export class DurabilitySweepService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
     private readonly outbound: OutboundDispatcherService,
+    private readonly reviewRequests?: ReviewRequestService,
   ) {}
 
   onModuleInit(): void {
@@ -103,9 +109,17 @@ export class DurabilitySweepService implements OnModuleInit, OnModuleDestroy {
       );
 
       const now = new Date();
+      const reviewRequests = this.reviewRequests;
+      if (reviewRequests) {
+        await this.step(report, 'emailQueue', () => reviewRequests.processDue(now));
+      }
+
       if (now.getTime() - this.lastRetentionAt >= RETENTION_INTERVAL_MS) {
         await this.step(report, 'webhookRetention', () => this.purgeExpiredEvents(now));
         await this.step(report, 'uninstallRetention', () => this.purgeUninstalledShops(now));
+        if (reviewRequests) {
+          await this.step(report, 'emailRetention', () => reviewRequests.purgeTerminal(now));
+        }
         this.lastRetentionAt = now.getTime();
       }
 

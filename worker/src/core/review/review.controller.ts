@@ -80,6 +80,18 @@ function validateWidgetConfigDto(dto: UpdateWidgetConfigDto): void {
   if (dto.reviewLayout !== undefined && !['list', 'grid', 'masonry'].includes(dto.reviewLayout)) {
     throw new BadRequestException('Invalid reviewLayout');
   }
+  if (dto.social_proof !== undefined) {
+    const sp = dto.social_proof;
+    if (!sp || typeof sp !== 'object' || Array.isArray(sp)) throw new BadRequestException('social_proof must be an object');
+    if (sp.enabled !== undefined && typeof sp.enabled !== 'boolean') throw new BadRequestException('social_proof.enabled must be a boolean');
+    if (sp.position !== undefined && !['bottom-left', 'bottom-right'].includes(sp.position)) {
+      throw new BadRequestException('social_proof.position must be bottom-left or bottom-right');
+    }
+    for (const field of ['interval_sec', 'max_per_session', 'min_rating'] as const) {
+      const val = sp[field];
+      if (val !== undefined && !Number.isInteger(val)) throw new BadRequestException(`social_proof.${field} must be an integer`);
+    }
+  }
   if (dto.reviewQnaDisplayMode !== undefined && !['tabs', 'stacked'].includes(dto.reviewQnaDisplayMode)) {
     throw new BadRequestException('Invalid reviewQnaDisplayMode');
   }

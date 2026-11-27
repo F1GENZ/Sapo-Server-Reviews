@@ -43,6 +43,13 @@ export class UpdateWidgetConfigDto {
   @IsOptional() @IsBoolean() requirePurchaseToReview?: boolean;
   @IsOptional() @IsBoolean() curatedSliderEnabled?: boolean;
   @IsOptional() @IsInt() @Min(5) @Max(15) curatedSliderCount?: number;
+  @IsOptional() social_proof?: {
+    enabled?: boolean;
+    position?: string;
+    interval_sec?: number;
+    max_per_session?: number;
+    min_rating?: number;
+  };
 }
 
 export const WIDGET_CONFIG_KEYS = [
@@ -85,4 +92,5 @@ export const WIDGET_CONFIG_KEYS = [
   'requirePurchaseToReview',
   'curatedSliderEnabled',
   'curatedSliderCount',
+  'social_proof',
 ] as const;

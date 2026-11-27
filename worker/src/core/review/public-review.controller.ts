@@ -41,6 +41,7 @@ type ReviewBody = IdentityBody & {
   author?: unknown;
   title?: unknown;
   media?: unknown;
+  review_token?: unknown;
 };
 
 const optionalText = (value: unknown, label: string, max: number): string | undefined => {
@@ -123,6 +124,15 @@ export class PublicReviewController {
     const storeDomain = this.extractStoreDomain(storeDomainHeader, storeDomainQuery);
     const config = await this.reviewService.getPublicWidgetConfig(storeDomain);
     return { data: config };
+  }
+
+  @Get('popup-feed')
+  async getPopupFeed(
+    @Headers('x-store-domain') storeDomainHeader?: string,
+    @Query('storeDomain') storeDomainQuery?: string,
+  ) {
+    const storeDomain = this.extractStoreDomain(storeDomainHeader, storeDomainQuery);
+    return { data: await this.reviewService.getPopupFeed(storeDomain) };
   }
 
   @Get('summaries')
@@ -239,6 +249,7 @@ export class PublicReviewController {
     if (author.length < 2) throw new BadRequestException('Author must be at least 2 characters');
     const content = optionalText(body.content, 'Content', 2000);
     const title = optionalText(body.title, 'Title', 100);
+    const reviewToken = optionalText(body.review_token, 'review_token', 300);
     const identity = parseIdentity(body);
     const media = sanitizePublicMedia(body.media, {
       publicDomain: this.env.R2_PUBLIC_DOMAIN,
@@ -249,7 +260,7 @@ export class PublicReviewController {
     const review = await this.reviewService.submitPublicReview(
       storeDomain,
       productId,
-      { rating, content: content ?? '', author, title, email: identity.email, phone: identity.phone, media },
+      { rating, content: content ?? '', author, title, email: identity.email, phone: identity.phone, reviewToken, media },
       {
         chargeIdentity: (charged) => this.chargeIdentity(storeDomain, charged),
         resolveToken: () =>

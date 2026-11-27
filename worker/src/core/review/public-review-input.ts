@@ -14,6 +14,8 @@ export type PublicReviewInput = {
   title?: string;
   email?: string;
   phone?: string;
+  /** Signed token from a review-request email; proves purchase for this product+order. */
+  reviewToken?: string;
   media: MediaItem[];
 };
 

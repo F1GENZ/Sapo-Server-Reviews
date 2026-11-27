@@ -16,6 +16,7 @@ import { HealthController } from './core/health/health.controller';
 import { MediaController } from './core/media/media.controller';
 import { PublicMediaController } from './core/media/public-media.controller';
 import { PublicMediaGuard } from './core/media/public-media.guard';
+import { ReviewRequestService } from './core/email/review-request.service';
 import { MetafieldSyncPendingService } from './core/database/metafield-sync-pending.service';
 import { DurabilitySweepService } from './core/ops/durability-sweep.service';
 import { OpsController } from './core/ops/ops.controller';
@@ -336,7 +337,9 @@ export const createApp = (
     pendingMetafields,
     mediaService,
     outboundWebhookService,
+    env,
   );
+  const reviewRequestService = new ReviewRequestService(prismaAsService, tokenEncryption, env);
   const reviewDataTools = new ReviewDataToolsService(
     prismaAsService,
     reviewProductStore,
@@ -370,6 +373,7 @@ export const createApp = (
     catalogSync,
     purchaseStore,
     createEventsQueue(workerEnv),
+    reviewRequestService,
   );
 
   const dashboardService = new DashboardService(reviewProductStore, qnaStore, prismaAsService);
@@ -398,6 +402,7 @@ export const createApp = (
     prismaAsService,
     mediaService,
     outboundDispatcher,
+    reviewRequestService,
   );
   const aiService = new AiService(env, rateLimit, workerEnv.AI ?? null);
   const themeInstallService = new ThemeInstallService(env, sapoService, sapoApiService, aiService, redisAsService);
@@ -683,6 +688,16 @@ export const createApp = (
     return finalizeResponse(res, out);
   });
 
+  // Static route: register before the /:productId param route so Hono matches it first.
+  app.get('/api/public/reviews/popup-feed', async (c) => {
+    const { req, res } = await buildExpressAdapters(c);
+    const out = await publicReviewController.getPopupFeed(
+      req.headers['x-store-domain'],
+      req.query.storeDomain,
+    );
+    return finalizeResponse(res, out);
+  });
+
   app.post('/api/public/reviews/:productId/purchase-eligibility', async (c) => {
     const { req, res } = await buildExpressAdapters(c, { parseBody: true });
     const productId = numericIdPipe.transform(c.req.param('productId'));
@@ -828,6 +843,21 @@ export const createApp = (
 
   // Admin Review Routes (mounted on both /api/admin/reviews and /api/reviews, plus settings on /api/settings)
   for (const base of ['/api/admin/reviews', '/api/reviews']) {
+    app.get(`${base}/config/review-request`, async (c) => {
+      const { req, res } = await buildExpressAdapters(c);
+      await requireShopAuth(req, res);
+      const out = await reviewRequestService.getReviewRequestConfigMasked(req.storeDomain!);
+      return finalizeResponse(res, { data: out });
+    });
+    const handleUpdateReviewRequestConfig = async (c: Context) => {
+      const { req, res } = await buildExpressAdapters(c, { parseBody: true });
+      await requireShopAuth(req, res);
+      const out = await reviewRequestService.updateReviewRequestConfig(req.storeDomain!, req.body as never);
+      if (req.storeDomain) await bumpStoreEdgeCache(req.storeDomain);
+      return finalizeResponse(res, { data: out });
+    };
+    app.put(`${base}/config/review-request`, handleUpdateReviewRequestConfig);
+    app.patch(`${base}/config/review-request`, handleUpdateReviewRequestConfig);
     app.get(`${base}/widget-config`, async (c) => {
       const { req, res } = await buildExpressAdapters(c);
       await requireShopAuth(req, res);

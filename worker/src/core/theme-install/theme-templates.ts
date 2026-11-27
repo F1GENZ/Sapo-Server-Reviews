@@ -51,7 +51,7 @@ export const SCHEMA_SNIPPET_BODY = `{% comment %}
 // /storefront/f1genz-storefront.{js,css}; the unit test recomputes it from the
 // real files, so any runtime change forces the bump and stale cached copies
 // (max-age 14400) are bypassed by the query in the loader snippet.
-export const STOREFRONT_ASSET_VERSION = { js: 'dbab49fda2', css: '2ec869c54b' };
+export const STOREFRONT_ASSET_VERSION = { js: '13a6caa209', css: 'd540f48d96' };
 
 export const buildSnippet = (kind: ThemeTargetKind, input: { apiUrl: string; storeDomain: string }): string => {
   const apiUrl = input.apiUrl.replace(/\/+$/, '');
